@@ -1,0 +1,15 @@
+[package]
+name = "cay-app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Rune overlay shell and views for Cay"
+
+[dependencies]
+cay-core.workspace = true
+cay-providers.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rune = { git = "https://github.com/anomalyco/rune.git", rev = "55ef5268f22038a95344b3e9d2b4a25ddba731b1" }

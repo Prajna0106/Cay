@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Floating Island prototype</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Space+Grotesk:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#2B4C7E}a:hover{color:#1B3357}
+.island{transition:width .45s cubic-bezier(.34,1.4,.5,1),height .45s cubic-bezier(.34,1.4,.5,1),border-radius .45s ease;overflow:hidden}
+.fade{animation:fadein .35s ease both}
+@keyframes fadein{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+.bar{animation:wave 1s ease-in-out infinite;transform-origin:bottom}
+.bar:nth-child(2){animation-delay:.15s}.bar:nth-child(3){animation-delay:.3s}.bar:nth-child(4){animation-delay:.45s}.bar:nth-child(5){animation-delay:.6s}
+@keyframes wave{0%,100%{transform:scaleY(.35)}50%{transform:scaleY(1)}}
+.paused .bar{animation-play-state:paused}
+.wall{background-color:#DCE1EA;background-image:radial-gradient(#C9D0DC 1px,transparent 1px);background-size:22px 22px}
+button{font-family:inherit}
+</style>
+</helmet>
+<div class="wall" style="width: 1280px; height: 760px; position: relative; font-family: Inter, system-ui, sans-serif; color: #F5F5F7; box-sizing: border-box; overflow: hidden">
+
+<div style="position: absolute; top: 14px; left: 0; right: 0; display: flex; justify-content: center">
+<button class="island" onClick="{{ toggleHub }}" aria-label="Floating island, click to expand" style="width: {{w}}px; height: {{h}}px; border-radius: {{r}}px; background: #0B0B0F; border: 1px solid #26262E; box-shadow: 0 18px 40px rgba(11,11,15,0.28); padding: 0; cursor: pointer; color: #F5F5F7; text-align: left; display: block">
+
+<sc-if value="{{ isIdle }}" hint-placeholder-val="{{ true }}">
+<div class="fade" style="height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 18px; box-sizing: border-box">
+<span style="font-size: 14px; font-weight: 600; letter-spacing: 0.2px">7:08 PM</span>
+<span style="display: flex; align-items: center; gap: 6px; font-size: 12px; color: #A1A1AA">
+<svg aria-hidden="true" width="22" height="12" viewBox="0 0 22 12" fill="none" stroke="#A1A1AA" stroke-width="1.4"><rect x="0.7" y="0.7" width="18" height="10.6" rx="3"></rect><rect x="3" y="3" width="11" height="6" rx="1.2" fill="#A1A1AA" stroke="none"></rect><path d="M20.5 4.5v3"></path></svg>
+82%
+</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ isMusic }}" hint-placeholder-val="{{ false }}">
+<div class="fade {{pausedClass}}" style="height: 100%; display: flex; align-items: center; gap: 10px; padding: 0 8px 0 8px; box-sizing: border-box">
+<div style="width: 30px; height: 30px; border-radius: 9px; background: #3B2F6B; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#C9C1F5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+</div>
+<div style="flex: 1; min-width: 0; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Midnight Drive <span style="color: #A1A1AA; font-weight: 400">· Lumen Avenue</span></div>
+<div style="display: flex; align-items: flex-end; gap: 3px; height: 16px; padding-right: 10px">
+<span class="bar" style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}}"></span>
+<span class="bar" style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}}"></span>
+<span class="bar" style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}}"></span>
+<span class="bar" style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}}"></span>
+<span class="bar" style="width: 3px; height: 16px; border-radius: 2px; background: {{accent}}"></span>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isNotify }}" hint-placeholder-val="{{ false }}">
+<div class="fade" style="height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 18px 0 14px; box-sizing: border-box">
+<div style="width: 44px; height: 44px; border-radius: 14px; background: #4A154B; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; font-size: 18px; color: #F5F5F7">S</div>
+<div style="flex: 1; min-width: 0">
+<div style="display: flex; justify-content: space-between; font-size: 12px; color: #A1A1AA"><span>Slack · #product</span><span>now</span></div>
+<div style="font-size: 14px; font-weight: 600; margin-top: 2px">Priya Sharma</div>
+<div style="font-size: 13px; color: #D4D4D8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Can you share the island PRD before tomorrow's sync?</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{ isCal }}" hint-placeholder-val="{{ false }}">
+<div class="fade" style="height: 100%; display: flex; align-items: center; gap: 12px; padding: 0 10px 0 12px; box-sizing: border-box">
+<div style="width: 38px; height: 38px; border-radius: 12px; background: #1C2A3D; display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0; line-height: 1">
+<span style="font-size: 9px; font-weight: 700; color: {{accent}}; letter-spacing: 0.6px">NOV</span>
+<span style="font-size: 15px; font-weight: 700; margin-top: 2px">15</span>
+</div>
+<div style="flex: 1; min-width: 0">
+<div style="font-size: 14px; font-weight: 600">Design review</div>
+<div style="font-size: 12px; color: #A1A1AA">in 12 min · Microsoft Teams</div>
+</div>
+<span style="background: {{accent}}; color: #0B0B0F; font-size: 13px; font-weight: 600; padding: 9px 16px; border-radius: 999px">Join</span>
+</div>
+</sc-if>
+
+<sc-if value="{{ isHub }}" hint-placeholder-val="{{ false }}">
+<div class="fade {{pausedClass}}" style="height: 100%; box-sizing: border-box; padding: 18px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px">
+
+<div style="background: #17171D; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 11px; font-weight: 600; color: #A1A1AA; letter-spacing: 0.8px">NOW PLAYING · SPOTIFY</div>
+<div style="display: flex; gap: 12px; align-items: center">
+<div style="width: 64px; height: 64px; border-radius: 14px; background: #3B2F6B; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#C9C1F5" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
+</div>
+<div style="min-width: 0">
+<div style="font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Midnight Drive</div>
+<div style="font-size: 13px; color: #A1A1AA">Lumen Avenue</div>
+</div>
+</div>
+<div>
+<div style="height: 4px; border-radius: 4px; background: #2E2E38"><div style="width: 42%; height: 4px; border-radius: 4px; background: {{accent}}"></div></div>
+<div style="display: flex; justify-content: space-between; font-size: 11px; color: #A1A1AA; margin-top: 6px"><span>1:34</span><span>3:48</span></div>
+</div>
+<div style="display: flex; justify-content: center; align-items: center; gap: 18px">
+<span aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5F5F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 20 9 12l10-8v16Z"></path><path d="M5 19V5"></path></svg></span>
+<span aria-hidden="true" style="width: 44px; height: 44px; border-radius: 999px; background: #F5F5F7; display: flex; align-items: center; justify-content: center">
+<sc-if value="{{ playing }}" hint-placeholder-val="{{ true }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="#0B0B0F"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg></sc-if>
+<sc-if value="{{ notPlaying }}" hint-placeholder-val="{{ false }}"><svg width="18" height="18" viewBox="0 0 24 24" fill="#0B0B0F"><path d="M7 4v16l13-8Z"></path></svg></sc-if>
+</span>
+<span aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#F5F5F7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 4 10 8-10 8V4Z"></path><path d="M19 5v14"></path></svg></span>
+</div>
+</div>
+
+<div style="background: #17171D; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 11px; font-weight: 600; color: #A1A1AA; letter-spacing: 0.8px">TODAY · SUN 15 NOV</div>
+<div style="display: flex; gap: 10px; align-items: stretch">
+<span style="width: 3px; border-radius: 3px; background: {{accent}}"></span>
+<div><div style="font-size: 14px; font-weight: 600">Design review</div><div style="font-size: 12px; color: #A1A1AA">7:20 – 8:00 PM · Teams</div></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: stretch">
+<span style="width: 3px; border-radius: 3px; background: #FFB86B"></span>
+<div><div style="font-size: 14px; font-weight: 600">Gym</div><div style="font-size: 12px; color: #A1A1AA">8:30 – 9:30 PM</div></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: stretch">
+<span style="width: 3px; border-radius: 3px; background: #6B6B78"></span>
+<div><div style="font-size: 14px; font-weight: 600">Call with Mom</div><div style="font-size: 12px; color: #A1A1AA">10:00 PM</div></div>
+</div>
+<div style="margin-top: auto; font-size: 12px; color: {{accent}}; font-weight: 600">Open calendar</div>
+</div>
+
+<div style="background: #17171D; border-radius: 22px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; justify-content: space-between; font-size: 11px; font-weight: 600; color: #A1A1AA; letter-spacing: 0.8px"><span>NOTIFICATIONS</span><span>Clear</span></div>
+<div style="display: flex; gap: 10px; align-items: center">
+<div style="width: 32px; height: 32px; border-radius: 10px; background: #4A154B; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0">S</div>
+<div style="min-width: 0"><div style="font-size: 13px; font-weight: 600">Priya Sharma</div><div style="font-size: 12px; color: #A1A1AA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Can you share the island PRD…</div></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: center">
+<div style="width: 32px; height: 32px; border-radius: 10px; background: #1F3B2C; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0">W</div>
+<div style="min-width: 0"><div style="font-size: 13px; font-weight: 600">WhatsApp · Family</div><div style="font-size: 12px; color: #A1A1AA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Dinner at 9?</div></div>
+</div>
+<div style="display: flex; gap: 10px; align-items: center">
+<div style="width: 32px; height: 32px; border-radius: 10px; background: #2B2F3A; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; flex-shrink: 0">G</div>
+<div style="min-width: 0"><div style="font-size: 13px; font-weight: 600">GitHub</div><div style="font-size: 12px; color: #A1A1AA; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">PR #42 was approved</div></div>
+</div>
+</div>
+
+</div>
+</sc-if>
+
+</button>
+</div>
+
+<div style="position: absolute; left: 0; right: 0; bottom: 40px; display: flex; flex-direction: column; align-items: center; gap: 14px">
+<div style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 13px; font-weight: 600; color: #3A4150; letter-spacing: 1.2px">PREVIEW STATE</div>
+<div style="display: flex; gap: 6px; padding: 6px; background: #FFFFFF; border-radius: 999px; box-shadow: 0 6px 20px rgba(30,40,60,0.10)">
+<sc-for list="{{ tabs }}" as="t" hint-placeholder-count="5">
+<button onClick="{{ t.pick }}" style="border: none; cursor: pointer; min-height: 44px; padding: 0 20px; border-radius: 999px; font-size: 14px; font-weight: 600; background: {{t.bg}}; color: {{t.fg}}">{{ t.label }}</button>
+</sc-for>
+</div>
+<sc-if value="{{ showPlay }}" hint-placeholder-val="{{ false }}">
+<button onClick="{{ togglePlay }}" style="border: 1px solid #B8C0CE; background: transparent; cursor: pointer; min-height: 44px; padding: 0 18px; border-radius: 999px; font-size: 13px; font-weight: 600; color: #2B3240">{{ playLabel }}</button>
+</sc-if>
+<div style="font-size: 13px; color: #4A5263">Tip: click the island to open or close the expanded hub.</div>
+</div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#7CC4FF","options":["#7CC4FF","#A3E635","#FFB86B","#F0ABFC"]},"$preview":{"width":1280,"height":760}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { mode: 'music', playing: true };
+  }
+  renderVals() {
+    const mode = this.state.mode;
+    const sizes = {
+      idle: [200, 40, 20],
+      music: [360, 46, 23],
+      notify: [440, 78, 30],
+      cal: [400, 62, 31],
+      hub: [820, 330, 40]
+    };
+    const s = sizes[mode];
+    const defs = [['idle', 'Idle'], ['music', 'Now playing'], ['notify', 'Notification'], ['cal', 'Upcoming event'], ['hub', 'Expanded hub']];
+    return {
+      accent: this.props.accent ?? '#7CC4FF',
+      w: s[0], h: s[1], r: s[2],
+      isIdle: mode === 'idle',
+      isMusic: mode === 'music',
+      isNotify: mode === 'notify',
+      isCal: mode === 'cal',
+      isHub: mode === 'hub',
+      playing: this.state.playing,
+      notPlaying: !this.state.playing,
+      pausedClass: this.state.playing ? '' : 'paused',
+      showPlay: mode === 'music' || mode === 'hub',
+      playLabel: this.state.playing ? 'Pause music' : 'Play music',
+      togglePlay: () => this.setState({ playing: !this.state.playing }),
+      toggleHub: () => this.setState({ mode: mode === 'hub' ? 'music' : 'hub' }),
+      tabs: defs.map(([id, label]) => ({
+        label,
+        bg: id === mode ? '#0B0B0F' : 'transparent',
+        fg: id === mode ? '#F5F5F7' : '#3A4150',
+        pick: () => this.setState({ mode: id })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
