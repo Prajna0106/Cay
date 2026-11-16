@@ -114,18 +114,16 @@ $$\text{HUD (Interrupt)} > \text{Notification Peek} > \text{Upcoming Event (with
 1. **HUD Interrupt**: Volume or brightness key presses trigger a 2.0 s interrupt overlay, then yield back to whatever state was active.
 2. **Notification Queueing**: If a notification arrives while another is showing, it replaces the current notification and resets the 5.0 s timer. Multiple unread notifications append to the Hub list.
 3. **No Active Media**: When playback stops or the media player closes, the island transitions gracefully to Idle after a 3.0 s debounce.
-4. **Hub Expansion**: Hub can be toggled by clicking the pill. When the Hub is open, new notifications append to the Notifications card without closing the Hub.
+4. **Hub Expansion**: Hub opens on hovering over the pill (with a short dwell debounce) or clicking the pill. When the Hub is open, new notifications append to the Notifications card without closing the Hub.
 
 ---
 
 ## 7. Calendar Sources
 
-Calendar integration options under consideration:
-- **Google Calendar**: OAuth 2.0 with PKCE for secure personal calendar retrieval.
-- **Microsoft 365 / Outlook**: Microsoft Graph API for enterprise and school accounts.
-- **Local / Webcal (.ics)**: Direct HTTP URL polling of `.ics` calendar feeds (requires no API credentials).
-
-*Open Question*: Which calendar source should ship first in MVP? (Recommendation: Webcal `.ics` URL for zero-auth simplicity, followed by Google OAuth PKCE).
+- **MVP (P0)**: **Local / Webcal (`.ics`)** — Direct HTTP URL polling of `.ics` calendar feeds (works with Google Calendar, iCloud, and Outlook webcal links without requiring API credentials).
+- **Post-MVP (P1/P2)**:
+  - **Google Calendar**: OAuth 2.0 with PKCE for native account sync.
+  - **Microsoft 365 / Outlook**: Microsoft Graph API for enterprise and school accounts.
 
 ---
 
@@ -163,7 +161,7 @@ Calendar integration options under consideration:
 
 ## 11. Distribution & Packaging
 
-- **Packaging Strategy**: Standard MSIX or lightweight WiX / Inno Setup installer. Depends on whether `UserNotificationListener` requires sparse package identity on Windows 10/11.
+- **Packaging Strategy**: **Standard standalone installer** (Inno Setup / WiX). If Phase 0 confirms `UserNotificationListener` requires package identity on Windows 10/11, the installer will register a sparse package manifest (`AddPackageByUriAsync`) alongside the unpackaged executable.
 - **Auto-Update**: Background update checker querying GitHub Releases (verified via SHA-256).
 - **Code Signing**: Sign executable and installer with Windows Authenticode certificate to prevent SmartScreen prompts.
 

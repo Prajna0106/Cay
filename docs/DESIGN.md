@@ -101,8 +101,8 @@ All values match `design/tokens.json`.
 
 ## 6. Interaction Model
 
-1. **Click-to-Toggle Hub**: Clicking anywhere on the pill toggles between the current state and the Expanded Hub.
-2. **Hover Expansion (User Preference)**: Default is disabled (click only). An option can enable slight expansion or peek on hover.
+1. **Hover Expansion (Default)**: Hovering over the pill (after a brief dwell threshold to prevent accidental triggers) smoothly expands the island into the Expanded Hub; moving the cursor away collapses it back to the active pill state.
+2. **Click-to-Toggle Hub**: Clicking the pill explicitly pins/toggles the Expanded Hub open or closed (and users can switch to click-only mode in Settings).
 3. **Esc Key & Outside Click**: Dismisses the Expanded Hub back to the active pill state.
 4. **State Priority**:
    $$\text{HUD} > \text{Notification} > \text{Upcoming Event} > \text{Timer} > \text{Now Playing} > \text{Idle}$$
