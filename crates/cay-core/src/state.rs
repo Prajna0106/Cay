@@ -142,6 +142,8 @@ pub fn resolve_highest_priority(
 pub struct IslandStateMachine {
     active_state: IslandState,
     is_hub_expanded: bool,
+    is_hovered: bool,
+    hover_expand_enabled: bool,
     latest_media: Option<MediaInfo>,
     active_notifications: Vec<ToastNotification>,
     upcoming_events: Vec<CalendarMeeting>,
@@ -157,6 +159,8 @@ impl Default for IslandStateMachine {
                 battery: BatteryStatus::default(),
             },
             is_hub_expanded: false,
+            is_hovered: false,
+            hover_expand_enabled: true,
             latest_media: None,
             active_notifications: Vec::new(),
             upcoming_events: Vec::new(),
@@ -174,7 +178,7 @@ impl IslandStateMachine {
 
     /// Current visual state to display.
     pub fn current_state(&self) -> IslandState {
-        if self.is_hub_expanded {
+        if self.is_hub_open() {
             IslandState::Hub {
                 media: self.latest_media.clone(),
                 today_events: self.upcoming_events.clone(),
@@ -186,7 +190,15 @@ impl IslandStateMachine {
     }
 
     pub fn is_hub_open(&self) -> bool {
-        self.is_hub_expanded
+        self.is_hub_expanded || (self.hover_expand_enabled && self.is_hovered)
+    }
+
+    pub fn set_hovered(&mut self, hovered: bool) {
+        self.is_hovered = hovered;
+    }
+
+    pub fn set_hover_expand_enabled(&mut self, enabled: bool) {
+        self.hover_expand_enabled = enabled;
     }
 
     pub fn toggle_hub(&mut self) {
@@ -195,6 +207,7 @@ impl IslandStateMachine {
 
     pub fn close_hub(&mut self) {
         self.is_hub_expanded = false;
+        self.is_hovered = false;
     }
 
     pub fn set_media(&mut self, media: Option<MediaInfo>) {
@@ -352,6 +365,27 @@ mod tests {
         assert!(matches!(sm.current_state(), IslandState::Hub { .. }));
 
         sm.toggle_hub();
+        assert!(!sm.is_hub_open());
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+    }
+
+    #[test]
+    fn test_state_machine_hover_expansion() {
+        let mut sm = IslandStateMachine::new();
+        assert!(!sm.is_hub_open());
+
+        // Hover expands by default
+        sm.set_hovered(true);
+        assert!(sm.is_hub_open());
+        assert!(matches!(sm.current_state(), IslandState::Hub { .. }));
+
+        sm.set_hovered(false);
+        assert!(!sm.is_hub_open());
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+
+        // When hover_expand_enabled is false, hover does not expand
+        sm.set_hover_expand_enabled(false);
+        sm.set_hovered(true);
         assert!(!sm.is_hub_open());
         assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
     }

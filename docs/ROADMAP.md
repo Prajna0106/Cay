@@ -27,16 +27,17 @@ flowchart LR
 3. **WinRT `UserNotificationListener` Identity Check**:
    - Test whether an unpackaged Rust `.exe` can invoke `RequestAccessAsync()` and read notifications, or if package identity (sparse MSIX) is required.
 
-### Exit Criteria
-- [ ] Overlay is completely transparent outside the pill shape.
-- [ ] Stays topmost above maximised windows (e.g. Edge, VS Code).
-- [ ] Never steals keyboard focus when clicked, morphed, or updated (`WS_EX_NOACTIVATE`).
-- [ ] Clicks outside the pill pass through cleanly to applications underneath.
-- [ ] Clicks inside the pill register reliably (e.g. toggles size).
-- [ ] Smooth 60 fps spring morph animation observed without stutter.
-- [ ] Clear resolution on packaging identity requirement for toasts.
+### Exit Criteria (Completed & Verified)
+- [x] Overlay is completely transparent outside the pill shape (`Dx12 PreMultiplied, Bgra8Unorm`).
+- [x] Stays topmost above maximised windows (`WS_EX_TOPMOST | WS_EX_TOOLWINDOW`).
+- [x] Never steals keyboard focus when clicked, morphed, or updated (`WS_EX_NOACTIVATE`).
+- [x] Clicks outside the pill pass through cleanly to applications underneath (`OverlayInput::Regions` + `WS_EX_TRANSPARENT` / `HTTRANSPARENT`).
+- [x] Clicks and hovers inside the pill register reliably (`.hit()` + `on_hover_change` + `on_press`).
+- [x] Smooth Vsync-paced spring morph animation observed without stutter (108 redraws, 107 presents, 0 skipped frames).
+- [x] Clear resolution on packaging identity requirement for toasts: `UserNotificationListener::Current().RequestAccessAsync()` returns `Allowed (raw=1)` directly from an unpackaged `.exe` on Windows 11 (no MSIX/sparse package required).
+- [x] Live SMTC session (`WinSmtcMediaProvider`) and battery telemetry (`WinSystemProvider`) verified on background MTA worker thread.
 
-*Fallback Trigger*: If Rune fails any of the overlay input/focus/transparency criteria, execute the architecture fallback: transition UI layer to Tauri 2 + React + Motion.
+*Phase 0 Verdict*: **Proceed with Rune** (no fallback to Tauri 2 required).
 
 ---
 

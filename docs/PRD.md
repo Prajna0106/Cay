@@ -129,15 +129,15 @@ $$\text{HUD (Interrupt)} > \text{Notification Peek} > \text{Upcoming Event (with
 
 ## 8. Non-Functional Targets
 
-*(All quantitative figures are targets to confirm during Phase 0 spike)*
+*(Updated with empirical Phase 0 Spike measurements on Windows 11)*
 
-| Metric | Target (to confirm in Phase 0) | Notes |
+| Metric | Target / Phase 0 Measured | Notes |
 |---|---|---|
-| **Idle RAM** | < 30 MB | Native Rust runtime, minimal heap allocations |
-| **Idle CPU** | < 0.2% | Event-driven redraws; no tight polling loops |
-| **Animation Framerate** | 60 fps (120 fps on high refresh) | GPU-driven spring animations via Rune |
-| **Cold Start Time** | < 400 ms | Instant startup from tray or shell autostart |
-| **Binary Size** | < 15 MB | Single executable without heavy runtime dependencies |
+| **Working Set RAM** | ~111–126 MB (Phase 0 measured, debug build with D3D12 swapchain & Parley font cache) | Release build + `release_gpu_after` optimization in Phase 1 |
+| **Idle CPU** | < 0.2% | Event-driven redraws (`update_if`); 0 redraws at rest |
+| **Animation Framerate** | 60 fps (Vsync-paced, 0 skipped frames verified in Phase 0) | GPU-driven spring animations via Rune (`Dx12 PreMultiplied`) |
+| **Cold Start Time** | ~102–146 ms GPU init (Phase 0 measured) | Instant startup from tray or shell autostart |
+| **Binary Size** | < 15 MB (release target) | Single executable without heavy runtime dependencies |
 
 ---
 

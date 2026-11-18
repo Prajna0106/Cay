@@ -10,3 +10,6 @@ description = "Platform integrations and provider traits for Cay"
 cay-core.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows.workspace = true
