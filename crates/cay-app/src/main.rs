@@ -1,16 +1,20 @@
 use cay_core::models::{
-    BatteryStatus, CalendarMeeting, HudKind, HudState, MediaInfo, TimerState, ToastNotification,
+    AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, MediaInfo, TimerState,
+    ToastNotification,
 };
 use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine};
 #[cfg(windows)]
 use cay_providers::{
-    init_mta, process_working_set_bytes, WinNotificationProvider, WinSmtcMediaProvider,
-    WinSystemProvider,
+    init_mta, open_external_url, process_working_set_bytes, set_windows_autostart,
+    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
 };
-use cay_providers::{MediaProvider, SystemProvider};
+use cay_providers::{
+    CalendarProvider, IcsCalendarProvider, MediaProvider, NotificationProvider, SystemProvider,
+};
 use rune::{
     col, el, icon, row, text, Align, App, AppSpec, Color, Cx, El, Icon, OverlayInput,
-    OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, TextStyle, WindowSpec,
+    OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, TextStyle, Tray, TrayEvent,
+    TrayIcon, TrayItem, TraySpec, WindowSpec,
 };
 
 // Design Tokens from design/tokens.json (Linear sRGB for Rune's Color pipeline)
@@ -62,12 +66,24 @@ const ACCENT_SKY: Color = Color {
     b: 1.0000,
     a: 1.0,
 }; // #7CC4FF
+const ACCENT_LIME: Color = Color {
+    r: 0.3663,
+    g: 0.7874,
+    b: 0.0369,
+    a: 1.0,
+}; // #A3E635
 const ACCENT_WARM: Color = Color {
     r: 1.0000,
     g: 0.4793,
     b: 0.1470,
     a: 1.0,
 }; // #FFB86B
+const ACCENT_PURPLE: Color = Color {
+    r: 0.8714,
+    g: 0.4072,
+    b: 0.9686,
+    a: 1.0,
+}; // #F0ABFC
 const ALBUM_TILE_BG: Color = Color {
     r: 0.0437,
     g: 0.0284,
@@ -152,6 +168,28 @@ static ICON_PAUSE: Icon = Icon {
     body: r#"<rect x="6" y="4" width="4" height="16" rx="1" fill="currentColor"/><rect x="14" y="4" width="4" height="16" rx="1" fill="currentColor"/>"#,
 };
 
+static ICON_PLAY: Icon = Icon {
+    name: "cay-play",
+    view: 24.0,
+    body: r#"<path d="M7 4v16l13-8L7 4Z" fill="currentColor"/>"#,
+};
+
+fn resolve_accent_color(preset: AccentPreset) -> Color {
+    match preset {
+        AccentPreset::Sky => ACCENT_SKY,
+        AccentPreset::Lime => ACCENT_LIME,
+        AccentPreset::Warm => ACCENT_WARM,
+        AccentPreset::Purple => ACCENT_PURPLE,
+    }
+}
+
+fn format_mm_ss(seconds: f64) -> String {
+    let total = seconds.max(0.0).round() as u32;
+    let mins = total / 60;
+    let secs = total % 60;
+    format!("{mins}:{secs:02}")
+}
+
 #[derive(Clone, Debug)]
 struct AppState {
     clock_text: String,
@@ -208,15 +246,17 @@ fn sample_event() -> CalendarMeeting {
 }
 
 fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
-    row()
+    let mut r = row()
         .key("content-idle")
         .w_full()
         .h_full()
         .px(18.0)
         .center_y()
         .child(text(clock).font(FONT_CLOCK).color(TEXT_PRIMARY))
-        .child(el().grow(1.0))
-        .child(
+        .child(el().grow(1.0));
+
+    if battery.is_present {
+        r = r.child(
             row()
                 .gap(6.0)
                 .center_y()
@@ -226,10 +266,12 @@ fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
                         .font(FONT_META_TABULAR)
                         .color(TEXT_MUTED),
                 ),
-        )
+        );
+    }
+    r
 }
 
-fn render_now_playing(media: &MediaInfo) -> El {
+fn render_now_playing(media: &MediaInfo, accent: Color) -> El {
     let heights = [8.0_f32, 14.0, 10.0, 16.0, 6.0];
     let mut waveform = row().gap(3.0).center_y().h(16.0);
     for (idx, bar_h) in heights.into_iter().enumerate() {
@@ -238,9 +280,15 @@ fn render_now_playing(media: &MediaInfo) -> El {
             el().key(format!("wave-{idx}"))
                 .size(3.0, h)
                 .radius(2.0)
-                .fill(ACCENT_SKY),
+                .fill(accent),
         );
     }
+
+    let artist_text = if media.artist.is_empty() {
+        format!("· {}", media.source_app)
+    } else {
+        format!("· {}", media.artist)
+    };
 
     row()
         .key("content-now-playing")
@@ -266,11 +314,7 @@ fn render_now_playing(media: &MediaInfo) -> El {
                         .font(FONT_BODY_SEMIBOLD)
                         .color(TEXT_PRIMARY),
                 )
-                .child(
-                    text(format!("· {}", media.artist))
-                        .font(FONT_BODY)
-                        .color(TEXT_MUTED),
-                ),
+                .child(text(artist_text).font(FONT_BODY).color(TEXT_MUTED)),
         )
         .child(waveform)
 }
@@ -280,6 +324,14 @@ fn render_notification(notif: &ToastNotification) -> El {
         Some(ch) => format!("{} · {}", notif.app_name, ch),
         None => notif.app_name.clone(),
     };
+    let badge_char = notif
+        .app_name
+        .chars()
+        .next()
+        .unwrap_or('N')
+        .to_ascii_uppercase()
+        .to_string();
+
     row()
         .key("content-notification")
         .w_full()
@@ -293,7 +345,7 @@ fn render_notification(notif: &ToastNotification) -> El {
                 .fill(NOTIF_SLACK_BG)
                 .center()
                 .child(
-                    text("S")
+                    text(badge_char)
                         .font(TextStyle::new(18.0, 700.0))
                         .color(TEXT_PRIMARY),
                 ),
@@ -318,7 +370,8 @@ fn render_notification(notif: &ToastNotification) -> El {
         )
 }
 
-fn render_upcoming_event(event: &CalendarMeeting) -> El {
+fn render_upcoming_event(event: &CalendarMeeting, accent: Color) -> El {
+    let join_url = event.join_url.clone();
     row()
         .key("content-upcoming-event")
         .w_full()
@@ -335,7 +388,7 @@ fn render_upcoming_event(event: &CalendarMeeting) -> El {
                 .child(
                     text("NOV")
                         .font(TextStyle::new(9.0, 700.0).tracking(0.6))
-                        .color(ACCENT_SKY),
+                        .color(accent),
                 )
                 .child(
                     text("15")
@@ -359,10 +412,19 @@ fn render_upcoming_event(event: &CalendarMeeting) -> El {
                 ),
         )
         .child(
-            el().size(64.0, 44.0)
+            el().key("event-btn-join")
+                .role("button")
+                .label("Join meeting")
+                .size(64.0, 44.0)
                 .radius(22.0)
-                .fill(ACCENT_SKY)
+                .fill(accent)
                 .center()
+                .on_press(move |_: &mut AppState| {
+                    #[cfg(windows)]
+                    if let Some(url) = &join_url {
+                        let _ = open_external_url(url);
+                    }
+                })
                 .child(text("Join").font(FONT_BODY_SEMIBOLD).color(ISLAND_BG)),
         )
 }
@@ -423,9 +485,32 @@ fn render_hub(
     media: Option<&MediaInfo>,
     today_events: &[CalendarMeeting],
     notifications: &[ToastNotification],
+    accent: Color,
 ) -> El {
     let default_media = sample_media();
     let active_media = media.unwrap_or(&default_media);
+    let source_header = if active_media.source_app.is_empty() {
+        "NOW PLAYING".to_string()
+    } else {
+        format!(
+            "NOW PLAYING · {}",
+            active_media.source_app.to_ascii_uppercase()
+        )
+    };
+    let ratio = if active_media.duration_secs > 0.0 {
+        (active_media.position_secs / active_media.duration_secs).clamp(0.0, 1.0) as f32
+    } else {
+        0.42
+    };
+    let fill_px = (228.0 * ratio).round();
+    let pos_label = format_mm_ss(active_media.position_secs);
+    let dur_label = format_mm_ss(active_media.duration_secs);
+    let play_pause_icon = if active_media.is_playing {
+        &ICON_PAUSE
+    } else {
+        &ICON_PLAY
+    };
+    let is_currently_playing = active_media.is_playing;
 
     // Card 1: Now Playing
     let media_card = col()
@@ -435,11 +520,7 @@ fn render_hub(
         .gap(12.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
-        .child(
-            text("NOW PLAYING · SPOTIFY")
-                .font(FONT_CAPS_LABEL)
-                .color(TEXT_MUTED),
-        )
+        .child(text(source_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED))
         .child(
             row()
                 .gap(12.0)
@@ -470,14 +551,14 @@ fn render_hub(
                         .h(4.0)
                         .radius(2.0)
                         .fill(TRACK_BG)
-                        .child(el().size(96.0, 4.0).radius(2.0).fill(ACCENT_SKY)),
+                        .child(el().size(fill_px, 4.0).radius(2.0).fill(accent)),
                 )
                 .child(
                     row()
                         .w_full()
-                        .child(text("1:34").font(FONT_META_TABULAR).color(TEXT_MUTED))
+                        .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
                         .child(el().grow(1.0))
-                        .child(text("3:48").font(FONT_META_TABULAR).color(TEXT_MUTED)),
+                        .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
                 ),
         )
         .child(
@@ -486,20 +567,60 @@ fn render_hub(
                 .center()
                 .gap(18.0)
                 .child(
-                    el().size(44.0, 44.0)
+                    el().key("hub-btn-prev")
+                        .role("button")
+                        .label("Previous track")
+                        .size(44.0, 44.0)
                         .center()
+                        .on_press(|_: &mut AppState| {
+                            #[cfg(windows)]
+                            std::thread::spawn(|| {
+                                let _ = WinSmtcMediaProvider::new().previous_track();
+                            });
+                        })
                         .child(icon(&ICON_PREV, 20.0).color(TEXT_PRIMARY)),
                 )
                 .child(
-                    el().size(44.0, 44.0)
+                    el().key("hub-btn-play-pause")
+                        .role("button")
+                        .label(if is_currently_playing {
+                            "Pause"
+                        } else {
+                            "Play"
+                        })
+                        .size(44.0, 44.0)
                         .radius(22.0)
                         .fill(TEXT_PRIMARY)
                         .center()
-                        .child(icon(&ICON_PAUSE, 18.0).color(ISLAND_BG)),
+                        .on_press(move |s: &mut AppState| {
+                            if let Some(mut m) = s.state_machine.latest_media().cloned() {
+                                m.is_playing = !m.is_playing;
+                                s.state_machine.set_media(Some(m));
+                            }
+                            #[cfg(windows)]
+                            std::thread::spawn(move || {
+                                let smtc = WinSmtcMediaProvider::new();
+                                if is_currently_playing {
+                                    let _ = smtc.pause();
+                                } else {
+                                    let _ = smtc.play();
+                                }
+                            });
+                        })
+                        .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
                 )
                 .child(
-                    el().size(44.0, 44.0)
+                    el().key("hub-btn-next")
+                        .role("button")
+                        .label("Next track")
+                        .size(44.0, 44.0)
                         .center()
+                        .on_press(|_: &mut AppState| {
+                            #[cfg(windows)]
+                            std::thread::spawn(|| {
+                                let _ = WinSmtcMediaProvider::new().next_track();
+                            });
+                        })
                         .child(icon(&ICON_NEXT, 20.0).color(TEXT_PRIMARY)),
                 ),
         );
@@ -525,7 +646,7 @@ fn render_hub(
             row()
                 .gap(10.0)
                 .center_y()
-                .child(el().size(3.0, 34.0).radius(2.0).fill(ACCENT_SKY))
+                .child(el().size(3.0, 34.0).radius(2.0).fill(accent))
                 .child(
                     col()
                         .gap(2.0)
@@ -554,13 +675,17 @@ fn render_hub(
                 ),
         )
         .child(el().grow(1.0))
-        .child(text("Open calendar").font(FONT_META).color(ACCENT_SKY));
+        .child(text("Open calendar").font(FONT_META).color(accent));
 
     // Card 3: Recent Notifications
     let first_sender = notifications
         .first()
         .map(|n| n.sender.as_str())
         .unwrap_or("Priya Sharma");
+    let first_msg = notifications
+        .first()
+        .map(|n| n.message.as_str())
+        .unwrap_or("Can you share the island PRD…");
     let notif_card = col()
         .grow(1.0)
         .h_full()
@@ -571,13 +696,26 @@ fn render_hub(
         .child(
             row()
                 .w_full()
+                .center_y()
                 .child(
                     text("NOTIFICATIONS")
                         .font(FONT_CAPS_LABEL)
                         .color(TEXT_MUTED),
                 )
                 .child(el().grow(1.0))
-                .child(text("Clear").font(FONT_META).color(TEXT_MUTED)),
+                .child(
+                    el().key("hub-btn-clear")
+                        .role("button")
+                        .label("Clear notifications")
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.clear_notifications();
+                            #[cfg(windows)]
+                            std::thread::spawn(|| {
+                                let _ = WinNotificationProvider::new().clear_all();
+                            });
+                        })
+                        .child(text("Clear").font(FONT_META).color(TEXT_MUTED)),
+                ),
         )
         .child(
             row()
@@ -598,11 +736,7 @@ fn render_hub(
                                 .font(FONT_BODY_SEMIBOLD)
                                 .color(TEXT_PRIMARY),
                         )
-                        .child(
-                            text("Can you share the island PRD…")
-                                .font(FONT_META)
-                                .color(TEXT_MUTED),
-                        ),
+                        .child(text(first_msg).font(FONT_META).color(TEXT_MUTED)),
                 ),
         );
 
@@ -624,19 +758,20 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         height,
         radius,
     } = current.dimensions();
+    let accent = resolve_accent_color(state.state_machine.settings().accent);
 
     let inner = match &current {
         IslandState::Idle { battery } => render_idle(&state.clock_text, battery),
-        IslandState::NowPlaying { media } => render_now_playing(media),
+        IslandState::NowPlaying { media } => render_now_playing(media, accent),
         IslandState::Notification { notification } => render_notification(notification),
-        IslandState::UpcomingEvent { event } => render_upcoming_event(event),
+        IslandState::UpcomingEvent { event } => render_upcoming_event(event, accent),
         IslandState::Timer { timer } => render_timer(timer),
         IslandState::Hud { hud } => render_hud(hud),
         IslandState::Hub {
             media,
             today_events,
             notifications,
-        } => render_hub(media.as_ref(), today_events, notifications),
+        } => render_hub(media.as_ref(), today_events, notifications, accent),
     };
 
     let pill = el()
@@ -658,6 +793,46 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         .child(inner);
 
     col().w_full().h_full().center_y().child(pill)
+}
+
+fn build_tray_icon() -> TrayIcon {
+    let (w, h) = (32_u32, 32_u32);
+    let mut rgba = vec![0_u8; (w * h * 4) as usize];
+    for y in 8..24 {
+        for x in 3..29 {
+            let idx = ((y * w + x) * 4) as usize;
+            // Solid dark pill (#0B0B0F) with sky accent dot (#7CC4FF)
+            if (13..19).contains(&y) && (20..26).contains(&x) {
+                rgba[idx] = 124;
+                rgba[idx + 1] = 196;
+                rgba[idx + 2] = 255;
+                rgba[idx + 3] = 255;
+            } else {
+                rgba[idx] = 11;
+                rgba[idx + 1] = 11;
+                rgba[idx + 2] = 15;
+                rgba[idx + 3] = 255;
+            }
+        }
+    }
+    TrayIcon::rgba(w, h, rgba)
+}
+
+fn build_tray_menu() -> Vec<TrayItem> {
+    vec![
+        TrayItem::action("toggle_hub", "Toggle Expanded Hub"),
+        TrayItem::Separator,
+        TrayItem::action("accent_sky", "Accent: Sky (#7CC4FF)"),
+        TrayItem::action("accent_lime", "Accent: Lime (#A3E635)"),
+        TrayItem::action("accent_warm", "Accent: Warm (#FFB86B)"),
+        TrayItem::action("accent_purple", "Accent: Purple (#F0ABFC)"),
+        TrayItem::Separator,
+        TrayItem::action("toggle_hover", "Toggle Hover Expansion"),
+        TrayItem::action("enable_autostart", "Enable Start with Windows"),
+        TrayItem::action("disable_autostart", "Disable Start with Windows"),
+        TrayItem::Separator,
+        TrayItem::action("quit", "Quit Cay"),
+    ]
 }
 
 fn spec() -> AppSpec<AppState> {
@@ -726,6 +901,53 @@ fn main() {
 
         pill.show();
 
+        // Initialize Windows System Tray Icon & Context Menu
+        let tray_pill = pill.clone();
+        let tray_app = app.handle();
+        let tray =
+            Tray::new(
+                TraySpec::new("cay.island", "Cay", build_tray_icon())
+                    .tooltip("Cay Floating Island")
+                    .menu(build_tray_menu()),
+                move |event| match event {
+                    TrayEvent::Activate { .. } => {
+                        tray_pill.update(|s, _| s.state_machine.toggle_hub());
+                    }
+                    TrayEvent::Menu(id) => {
+                        match id.as_str() {
+                            "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
+                            "accent_sky" => tray_pill
+                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Sky)),
+                            "accent_lime" => tray_pill
+                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Lime)),
+                            "accent_warm" => tray_pill
+                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Warm)),
+                            "accent_purple" => tray_pill
+                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Purple)),
+                            "toggle_hover" => tray_pill.update(|s, _| {
+                                let next = !s.state_machine.settings().hover_expand_enabled;
+                                s.state_machine.set_hover_expand_enabled(next);
+                            }),
+                            "enable_autostart" => {
+                                #[cfg(windows)]
+                                let _ = set_windows_autostart(true);
+                            }
+                            "disable_autostart" => {
+                                #[cfg(windows)]
+                                let _ = set_windows_autostart(false);
+                            }
+                            "quit" => tray_app.quit(),
+                            _ => {}
+                        }
+                    }
+                    _ => {}
+                },
+            );
+        // Keep Tray handle alive for the lifetime of the application
+        if let Ok(tray_handle) = tray {
+            std::mem::forget(tray_handle);
+        }
+
         // Spawn background MTA worker thread for Windows providers
         #[cfg(windows)]
         {
@@ -740,6 +962,7 @@ fn main() {
                     let smtc = WinSmtcMediaProvider::new();
                     let sys = WinSystemProvider::new();
                     let notif = WinNotificationProvider::new();
+                    let cal = IcsCalendarProvider::default();
 
                     if is_spike_probe {
                         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -762,7 +985,6 @@ fn main() {
                             "Phase 0 Spike: Overlay & WinRT providers probed"
                         );
 
-                        // Apply live SMTC track if present, otherwise sample media for morph test
                         let morph_media = smtc_res.ok().flatten().unwrap_or_else(sample_media);
 
                         // Trigger spring morph: Idle -> NowPlaying
@@ -801,6 +1023,8 @@ fn main() {
                     loop {
                         let battery_opt = sys.get_battery_status().ok();
                         let media_opt = smtc.get_current_media().ok().flatten();
+                        let toasts_opt = notif.get_recent_notifications().ok();
+                        let meetings_opt = cal.get_upcoming_meetings(15).ok();
 
                         worker_pill.update_if(move |s, _| {
                             let before = s.state_machine.current_state();
@@ -808,6 +1032,13 @@ fn main() {
                                 s.state_machine.set_battery(bat);
                             }
                             s.state_machine.set_media(media_opt);
+                            if let Some(toasts) = toasts_opt {
+                                s.state_machine.sync_notifications(toasts);
+                            }
+                            if let Some(meetings) = meetings_opt {
+                                s.state_machine.set_upcoming_events(meetings);
+                            }
+                            let _ = s.state_machine.tick(1.0);
                             s.state_machine.current_state() != before
                         });
 

@@ -1,7 +1,14 @@
 use crate::models::{
-    BatteryStatus, CalendarMeeting, HudState, MediaInfo, TimerState, ToastNotification,
+    AccentPreset, BatteryStatus, CalendarMeeting, HudState, IslandSettings, MediaInfo, TimerState,
+    ToastNotification,
 };
 use serde::{Deserialize, Serialize};
+
+/// Default peek duration for a newly arrived toast notification (5.0 seconds per `design/tokens.json`).
+pub const NOTIFICATION_PEEK_DURATION_SECS: f32 = 5.0;
+
+/// Default display duration for the Volume/Brightness HUD interrupt (2.0 seconds per `design/tokens.json`).
+pub const HUD_DISPLAY_DURATION_SECS: f32 = 2.0;
 
 /// Visual geometry dimensions (width, height, corner radius) in device points.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -143,12 +150,16 @@ pub struct IslandStateMachine {
     active_state: IslandState,
     is_hub_expanded: bool,
     is_hovered: bool,
-    hover_expand_enabled: bool,
+    is_fullscreen_concealed: bool,
+    settings: IslandSettings,
     latest_media: Option<MediaInfo>,
     active_notifications: Vec<ToastNotification>,
+    seen_notification_ids: Vec<u64>,
+    peek_remaining_secs: f32,
     upcoming_events: Vec<CalendarMeeting>,
     active_timer: Option<TimerState>,
     active_hud: Option<HudState>,
+    hud_remaining_secs: f32,
     battery_status: BatteryStatus,
 }
 
@@ -160,12 +171,16 @@ impl Default for IslandStateMachine {
             },
             is_hub_expanded: false,
             is_hovered: false,
-            hover_expand_enabled: true,
+            is_fullscreen_concealed: false,
+            settings: IslandSettings::default(),
             latest_media: None,
             active_notifications: Vec::new(),
+            seen_notification_ids: Vec::new(),
+            peek_remaining_secs: 0.0,
             upcoming_events: Vec::new(),
             active_timer: None,
             active_hud: None,
+            hud_remaining_secs: 0.0,
             battery_status: BatteryStatus::default(),
         }
     }
@@ -190,7 +205,7 @@ impl IslandStateMachine {
     }
 
     pub fn is_hub_open(&self) -> bool {
-        self.is_hub_expanded || (self.hover_expand_enabled && self.is_hovered)
+        self.is_hub_expanded || (self.settings.hover_expand_enabled && self.is_hovered)
     }
 
     pub fn set_hovered(&mut self, hovered: bool) {
@@ -198,7 +213,27 @@ impl IslandStateMachine {
     }
 
     pub fn set_hover_expand_enabled(&mut self, enabled: bool) {
-        self.hover_expand_enabled = enabled;
+        self.settings.hover_expand_enabled = enabled;
+    }
+
+    pub fn settings(&self) -> &IslandSettings {
+        &self.settings
+    }
+
+    pub fn settings_mut(&mut self) -> &mut IslandSettings {
+        &mut self.settings
+    }
+
+    pub fn set_accent(&mut self, accent: AccentPreset) {
+        self.settings.accent = accent;
+    }
+
+    pub fn is_fullscreen_concealed(&self) -> bool {
+        self.is_fullscreen_concealed
+    }
+
+    pub fn set_fullscreen_concealed(&mut self, concealed: bool) {
+        self.is_fullscreen_concealed = concealed;
     }
 
     pub fn toggle_hub(&mut self) {
@@ -215,18 +250,59 @@ impl IslandStateMachine {
         self.recompute_state();
     }
 
+    pub fn latest_media(&self) -> Option<&MediaInfo> {
+        self.latest_media.as_ref()
+    }
+
+    /// Pushes a newly arrived toast notification and triggers the 5.0-second peek window.
     pub fn push_notification(&mut self, notification: ToastNotification) {
+        if !self.seen_notification_ids.contains(&notification.id) {
+            self.seen_notification_ids.push(notification.id);
+        }
+        self.active_notifications
+            .retain(|n| n.id != notification.id);
         self.active_notifications.insert(0, notification);
+        if self.active_notifications.len() > 10 {
+            self.active_notifications.truncate(10);
+        }
+        self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
+        self.recompute_state();
+    }
+
+    /// Synchronizes a polled snapshot of active OS toasts. Only newly discovered notification IDs
+    /// trigger the 5.0-second peek banner.
+    pub fn sync_notifications(&mut self, toasts: Vec<ToastNotification>) {
+        let mut has_new = false;
+        for toast in toasts {
+            if !self.seen_notification_ids.contains(&toast.id) {
+                self.seen_notification_ids.push(toast.id);
+                self.active_notifications.retain(|n| n.id != toast.id);
+                self.active_notifications.insert(0, toast);
+                has_new = true;
+            }
+        }
+        if self.active_notifications.len() > 10 {
+            self.active_notifications.truncate(10);
+        }
+        if has_new {
+            self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
+        }
         self.recompute_state();
     }
 
     pub fn clear_notifications(&mut self) {
         self.active_notifications.clear();
+        self.peek_remaining_secs = 0.0;
         self.recompute_state();
     }
 
     pub fn set_upcoming_event(&mut self, event: Option<CalendarMeeting>) {
         self.upcoming_events = event.into_iter().collect();
+        self.recompute_state();
+    }
+
+    pub fn set_upcoming_events(&mut self, events: Vec<CalendarMeeting>) {
+        self.upcoming_events = events;
         self.recompute_state();
     }
 
@@ -237,11 +313,13 @@ impl IslandStateMachine {
 
     pub fn trigger_hud(&mut self, hud: HudState) {
         self.active_hud = Some(hud);
+        self.hud_remaining_secs = HUD_DISPLAY_DURATION_SECS;
         self.recompute_state();
     }
 
     pub fn clear_hud(&mut self) {
         self.active_hud = None;
+        self.hud_remaining_secs = 0.0;
         self.recompute_state();
     }
 
@@ -250,16 +328,50 @@ impl IslandStateMachine {
         self.recompute_state();
     }
 
+    /// Steps time-dependent state durations (5.0s notification peek, 2.0s HUD interrupt).
+    /// Returns `true` if the resolved island state changed.
+    pub fn tick(&mut self, dt_secs: f32) -> bool {
+        let before = self.current_state();
+
+        if self.peek_remaining_secs > 0.0 {
+            self.peek_remaining_secs = (self.peek_remaining_secs - dt_secs).max(0.0);
+        }
+
+        if self.hud_remaining_secs > 0.0 {
+            self.hud_remaining_secs = (self.hud_remaining_secs - dt_secs).max(0.0);
+            if self.hud_remaining_secs == 0.0 {
+                self.active_hud = None;
+            }
+        }
+
+        self.recompute_state();
+        self.current_state() != before
+    }
+
     fn recompute_state(&mut self) {
-        let first_notification = self.active_notifications.first();
-        let next_event = self.upcoming_events.first();
+        let peek_notification =
+            if self.settings.enable_notifications && self.peek_remaining_secs > 0.0 {
+                self.active_notifications.first()
+            } else {
+                None
+            };
+        let next_event = if self.settings.enable_calendar {
+            self.upcoming_events.first()
+        } else {
+            None
+        };
+        let media = if self.settings.enable_media {
+            self.latest_media.as_ref()
+        } else {
+            None
+        };
 
         self.active_state = resolve_highest_priority(
             self.active_hud.as_ref(),
-            first_notification,
+            peek_notification,
             next_event,
             self.active_timer.as_ref(),
-            self.latest_media.as_ref(),
+            media,
             Some(&self.battery_status),
         );
     }
@@ -388,5 +500,54 @@ mod tests {
         sm.set_hovered(true);
         assert!(!sm.is_hub_open());
         assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+    }
+
+    #[test]
+    fn test_notification_peek_auto_dismisses_and_remains_in_hub() {
+        let mut sm = IslandStateMachine::new();
+        sm.set_media(Some(MediaInfo {
+            title: "Song".into(),
+            artist: "Artist".into(),
+            album: None,
+            is_playing: true,
+            position_secs: 0.0,
+            duration_secs: 180.0,
+            source_app: "Spotify".into(),
+        }));
+        assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
+
+        // Pushing a notification overrides NowPlaying for 5.0s
+        sm.push_notification(ToastNotification {
+            id: 42,
+            app_name: "Slack".into(),
+            channel: Some("#eng".into()),
+            sender: "Priya".into(),
+            message: "Check PR".into(),
+            received_timestamp: 0,
+        });
+        assert!(matches!(
+            sm.current_state(),
+            IslandState::Notification { .. }
+        ));
+
+        // After 3.0s, still peeking
+        assert!(!sm.tick(3.0));
+        assert!(matches!(
+            sm.current_state(),
+            IslandState::Notification { .. }
+        ));
+
+        // After another 2.5s (total 5.5s), folds back to NowPlaying
+        assert!(sm.tick(2.5));
+        assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
+
+        // Opening the Hub still lists the notification
+        sm.toggle_hub();
+        if let IslandState::Hub { notifications, .. } = sm.current_state() {
+            assert_eq!(notifications.len(), 1);
+            assert_eq!(notifications[0].id, 42);
+        } else {
+            panic!("Expected Hub state");
+        }
     }
 }

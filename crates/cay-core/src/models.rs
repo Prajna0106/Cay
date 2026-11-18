@@ -86,3 +86,39 @@ impl Default for BatteryStatus {
         }
     }
 }
+
+/// User-selectable accent color presets from `design/tokens.json`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum AccentPreset {
+    #[default]
+    Sky,
+    Lime,
+    Warm,
+    Purple,
+}
+
+/// User preferences for Cay island behavior and appearance.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct IslandSettings {
+    pub accent: AccentPreset,
+    pub top_offset_px: f32,
+    pub hover_expand_enabled: bool,
+    pub enable_media: bool,
+    pub enable_notifications: bool,
+    pub enable_calendar: bool,
+    pub ics_source: Option<String>,
+}
+
+impl Default for IslandSettings {
+    fn default() -> Self {
+        Self {
+            accent: AccentPreset::Sky,
+            top_offset_px: 14.0,
+            hover_expand_enabled: true,
+            enable_media: true,
+            enable_notifications: true,
+            enable_calendar: true,
+            ics_source: None,
+        }
+    }
+}

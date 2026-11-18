@@ -11,7 +11,7 @@ use windows::Win32::System::Threading::GetCurrentProcess;
 use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
 };
-use windows::UI::Notifications::NotificationKinds;
+use windows::UI::Notifications::{KnownNotificationBindings, NotificationKinds};
 
 fn map_win_err(err: windows::core::Error) -> ProviderError {
     ProviderError::PlatformError(format!("{} (0x{:08X})", err.message(), err.code().0 as u32))
@@ -255,12 +255,14 @@ impl NotificationProvider for WinNotificationProvider {
                     .map(|s| s.to_string())
                     .unwrap_or_else(|_| "System".to_string());
 
+                let (sender, message) = extract_toast_text(&item, &app_name);
+
                 results.push(ToastNotification {
                     id,
-                    app_name: app_name.clone(),
+                    app_name,
                     channel: None,
-                    sender: app_name,
-                    message: "Notification".to_string(),
+                    sender,
+                    message,
                     received_timestamp: 0,
                 });
             }
@@ -319,4 +321,90 @@ impl SystemProvider for WinSystemProvider {
             is_present,
         })
     }
+}
+
+fn extract_toast_text(
+    item: &windows::UI::Notifications::UserNotification,
+    fallback_app: &str,
+) -> (String, String) {
+    let mut sender = fallback_app.to_string();
+    let mut message = String::new();
+
+    if let Ok(notif) = item.Notification() {
+        if let Ok(visual) = notif.Visual() {
+            let binding = KnownNotificationBindings::ToastGeneric()
+                .and_then(|tmpl| visual.GetBinding(&tmpl))
+                .or_else(|_| visual.Bindings().and_then(|b| b.GetAt(0)));
+            if let Ok(binding) = binding {
+                if let Ok(texts) = binding.GetTextElements() {
+                    let count = texts.Size().unwrap_or(0);
+                    if count >= 1 {
+                        if let Ok(first) = texts.GetAt(0).and_then(|t| t.Text()) {
+                            let s = first.to_string();
+                            if !s.is_empty() {
+                                sender = s;
+                            }
+                        }
+                    }
+                    let mut body_parts = Vec::new();
+                    for idx in 1..count {
+                        if let Ok(part) = texts.GetAt(idx).and_then(|t| t.Text()) {
+                            let s = part.to_string();
+                            if !s.is_empty() {
+                                body_parts.push(s);
+                            }
+                        }
+                    }
+                    if !body_parts.is_empty() {
+                        message = body_parts.join(" · ");
+                    }
+                }
+            }
+        }
+    }
+
+    if message.is_empty() {
+        message = sender.clone();
+    }
+    (sender, message)
+}
+
+/// Opens an `http://` or `https://` meeting URL in the default Windows browser/handler.
+pub fn open_external_url(url: &str) -> Result<(), ProviderError> {
+    if !url.starts_with("https://") && !url.starts_with("http://") {
+        return Err(ProviderError::Internal(
+            "Refusing to open non-HTTP(S) URL".to_string(),
+        ));
+    }
+    std::process::Command::new("cmd")
+        .args(["/C", "start", "", url])
+        .spawn()
+        .map_err(|e| ProviderError::PlatformError(format!("Failed to launch URL: {e}")))?;
+    Ok(())
+}
+
+/// Configures or removes Cay from `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+pub fn set_windows_autostart(enable: bool) -> Result<(), ProviderError> {
+    let run_key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+    if enable {
+        let exe_path = std::env::current_exe()
+            .map_err(|e| ProviderError::Internal(format!("Cannot resolve current_exe: {e}")))?;
+        let exe_str = exe_path.to_string_lossy().into_owned();
+        let status = std::process::Command::new("reg")
+            .args([
+                "add", run_key, "/v", "Cay", "/t", "REG_SZ", "/d", &exe_str, "/f",
+            ])
+            .status()
+            .map_err(|e| ProviderError::PlatformError(format!("Failed to run reg.exe: {e}")))?;
+        if !status.success() {
+            return Err(ProviderError::PlatformError(
+                "reg add HKCU Run failed".to_string(),
+            ));
+        }
+    } else {
+        let _ = std::process::Command::new("reg")
+            .args(["delete", run_key, "/v", "Cay", "/f"])
+            .status();
+    }
+    Ok(())
 }
