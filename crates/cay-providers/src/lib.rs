@@ -13,6 +13,7 @@ pub use traits::{
 };
 #[cfg(windows)]
 pub use windows_impl::{
-    init_mta, open_external_url, process_working_set_bytes, set_windows_autostart,
-    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
+    current_local_clock_and_date, init_mta, is_foreground_window_fullscreen, open_external_url,
+    process_working_set_bytes, set_windows_autostart, WinNotificationProvider,
+    WinSmtcMediaProvider, WinSystemProvider,
 };

@@ -10,6 +10,8 @@ pub struct MediaInfo {
     pub position_secs: f64,
     pub duration_secs: f64,
     pub source_app: String,
+    #[serde(skip)]
+    pub thumbnail_bytes: Option<Vec<u8>>,
 }
 
 impl Default for MediaInfo {
@@ -22,6 +24,7 @@ impl Default for MediaInfo {
             position_secs: 0.0,
             duration_secs: 0.0,
             source_app: String::new(),
+            thumbnail_bytes: None,
         }
     }
 }
@@ -120,5 +123,81 @@ impl Default for IslandSettings {
             enable_calendar: true,
             ics_source: None,
         }
+    }
+}
+
+impl IslandSettings {
+    /// Resolves `%APPDATA%\Cay\settings.json` on Windows (or `$HOME/.config/cay/settings.json`).
+    pub fn default_settings_path() -> Option<std::path::PathBuf> {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return Some(
+                std::path::PathBuf::from(appdata)
+                    .join("Cay")
+                    .join("settings.json"),
+            );
+        }
+        std::env::var_os("HOME").map(|home| {
+            std::path::PathBuf::from(home)
+                .join(".config")
+                .join("cay")
+                .join("settings.json")
+        })
+    }
+
+    pub fn load_from_path(path: &std::path::Path) -> Result<Self, String> {
+        let content = std::fs::read_to_string(path)
+            .map_err(|e| format!("Failed to read settings file {}: {e}", path.display()))?;
+        serde_json::from_str(&content)
+            .map_err(|e| format!("Failed to parse settings JSON {}: {e}", path.display()))
+    }
+
+    pub fn save_to_path(&self, path: &std::path::Path) -> Result<(), String> {
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| {
+                format!(
+                    "Failed to create settings directory {}: {e}",
+                    parent.display()
+                )
+            })?;
+        }
+        let json = serde_json::to_string_pretty(self)
+            .map_err(|e| format!("Failed to serialize settings: {e}"))?;
+        std::fs::write(path, json)
+            .map_err(|e| format!("Failed to write settings file {}: {e}", path.display()))
+    }
+
+    pub fn load_default() -> Self {
+        Self::default_settings_path()
+            .and_then(|p| Self::load_from_path(&p).ok())
+            .unwrap_or_default()
+    }
+
+    pub fn save_default(&self) -> Result<(), String> {
+        let Some(path) = Self::default_settings_path() else {
+            return Err("Could not determine default settings directory".to_string());
+        };
+        self.save_to_path(&path)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_settings_json_roundtrip() {
+        let settings = IslandSettings {
+            accent: AccentPreset::Purple,
+            top_offset_px: 18.0,
+            hover_expand_enabled: false,
+            enable_media: true,
+            enable_notifications: true,
+            enable_calendar: false,
+            ics_source: Some("C:\\Calendars\\work.ics".to_string()),
+        };
+
+        let json = serde_json::to_string(&settings).unwrap();
+        let parsed: IslandSettings = serde_json::from_str(&json).unwrap();
+        assert_eq!(settings, parsed);
     }
 }

@@ -224,6 +224,11 @@ impl IslandStateMachine {
         &mut self.settings
     }
 
+    pub fn set_settings(&mut self, settings: IslandSettings) {
+        self.settings = settings;
+        self.recompute_state();
+    }
+
     pub fn set_accent(&mut self, accent: AccentPreset) {
         self.settings.accent = accent;
     }
@@ -444,6 +449,7 @@ mod tests {
             position_secs: 10.0,
             duration_secs: 200.0,
             source_app: "Spotify".into(),
+            thumbnail_bytes: None,
         };
 
         // When media only -> NowPlaying
@@ -513,6 +519,7 @@ mod tests {
             position_secs: 0.0,
             duration_secs: 180.0,
             source_app: "Spotify".into(),
+            thumbnail_bytes: None,
         }));
         assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
 

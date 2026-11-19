@@ -1,21 +1,23 @@
 use cay_core::models::{
-    AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, MediaInfo, TimerState,
-    ToastNotification,
+    AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
+    TimerState, ToastNotification,
 };
 use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine};
 #[cfg(windows)]
 use cay_providers::{
-    init_mta, open_external_url, process_working_set_bytes, set_windows_autostart,
-    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
+    current_local_clock_and_date, init_mta, is_foreground_window_fullscreen, open_external_url,
+    process_working_set_bytes, set_windows_autostart, WinNotificationProvider,
+    WinSmtcMediaProvider, WinSystemProvider,
 };
 use cay_providers::{
     CalendarProvider, IcsCalendarProvider, MediaProvider, NotificationProvider, SystemProvider,
 };
 use rune::{
-    col, el, icon, row, text, Align, App, AppSpec, Color, Cx, El, Icon, OverlayInput,
-    OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, TextStyle, Tray, TrayEvent,
-    TrayIcon, TrayItem, TraySpec, WindowSpec,
+    col, el, icon, row, text, Align, App, AppSpec, Color, Cx, El, Icon, ImageCache, OverlayInput,
+    OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, SurfaceFit, TextStyle, Tray,
+    TrayEvent, TrayIcon, TrayItem, TraySpec, WindowSpec,
 };
+use std::sync::{Arc, OnceLock};
 
 // Design Tokens from design/tokens.json (Linear sRGB for Rune's Color pipeline)
 const ISLAND_BG: Color = Color {
@@ -190,9 +192,36 @@ fn format_mm_ss(seconds: f64) -> String {
     format!("{mins}:{secs:02}")
 }
 
+fn image_cache() -> &'static ImageCache {
+    static CACHE: OnceLock<ImageCache> = OnceLock::new();
+    CACHE.get_or_init(|| ImageCache::new(Arc::new(|| {})))
+}
+
+fn render_album_tile(size: f32, radius: f32, icon_size: f32, thumbnail_bytes: Option<&[u8]>) -> El {
+    if let Some(bytes) = thumbnail_bytes {
+        if !bytes.is_empty() {
+            let img = image_cache().load(bytes.to_vec());
+            if img.is_ready() && img.error().is_none() {
+                return el()
+                    .size(size, size)
+                    .radius(radius)
+                    .fill(ALBUM_TILE_BG)
+                    .pixels_fit(img.pixels(), SurfaceFit::Fill);
+            }
+        }
+    }
+    el().size(size, size)
+        .radius(radius)
+        .fill(ALBUM_TILE_BG)
+        .center()
+        .child(icon(&ICON_MUSIC, icon_size).color(ALBUM_ICON_COLOR))
+}
+
 #[derive(Clone, Debug)]
 struct AppState {
     clock_text: String,
+    today_header: String,
+    waveform_phase: usize,
     state_machine: IslandStateMachine,
 }
 
@@ -206,6 +235,8 @@ impl Default for AppState {
         });
         Self {
             clock_text: "7:08 PM".to_string(),
+            today_header: "TODAY · SUN 15 NOV".to_string(),
+            waveform_phase: 0,
             state_machine: sm,
         }
     }
@@ -220,6 +251,7 @@ fn sample_media() -> MediaInfo {
         position_secs: 94.0,
         duration_secs: 228.0,
         source_app: "Spotify".to_string(),
+        thumbnail_bytes: None,
     }
 }
 
@@ -271,16 +303,18 @@ fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
     r
 }
 
-fn render_now_playing(media: &MediaInfo, accent: Color) -> El {
+fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -> El {
     let heights = [8.0_f32, 14.0, 10.0, 16.0, 6.0];
     let mut waveform = row().gap(3.0).center_y().h(16.0);
-    for (idx, bar_h) in heights.into_iter().enumerate() {
+    for idx in 0..heights.len() {
+        let bar_h = heights[(idx + waveform_phase) % heights.len()];
         let h = if media.is_playing { bar_h } else { 5.0 };
         waveform = waveform.child(
             el().key(format!("wave-{idx}"))
                 .size(3.0, h)
                 .radius(2.0)
-                .fill(accent),
+                .fill(accent)
+                .motion(PILL_SPRING),
         );
     }
 
@@ -297,13 +331,12 @@ fn render_now_playing(media: &MediaInfo, accent: Color) -> El {
         .px(12.0)
         .gap(10.0)
         .center_y()
-        .child(
-            el().size(30.0, 30.0)
-                .radius(9.0)
-                .fill(ALBUM_TILE_BG)
-                .center()
-                .child(icon(&ICON_MUSIC, 14.0).color(ALBUM_ICON_COLOR)),
-        )
+        .child(render_album_tile(
+            30.0,
+            9.0,
+            14.0,
+            media.thumbnail_bytes.as_deref(),
+        ))
         .child(
             row()
                 .grow(1.0)
@@ -485,6 +518,7 @@ fn render_hub(
     media: Option<&MediaInfo>,
     today_events: &[CalendarMeeting],
     notifications: &[ToastNotification],
+    today_header: &str,
     accent: Color,
 ) -> El {
     let default_media = sample_media();
@@ -525,13 +559,12 @@ fn render_hub(
             row()
                 .gap(12.0)
                 .center_y()
-                .child(
-                    el().size(64.0, 64.0)
-                        .radius(14.0)
-                        .fill(ALBUM_TILE_BG)
-                        .center()
-                        .child(icon(&ICON_MUSIC, 26.0).color(ALBUM_ICON_COLOR)),
-                )
+                .child(render_album_tile(
+                    64.0,
+                    14.0,
+                    26.0,
+                    active_media.thumbnail_bytes.as_deref(),
+                ))
                 .child(
                     col()
                         .gap(4.0)
@@ -637,11 +670,7 @@ fn render_hub(
         .gap(10.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
-        .child(
-            text("TODAY · SUN 15 NOV")
-                .font(FONT_CAPS_LABEL)
-                .color(TEXT_MUTED),
-        )
+        .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED))
         .child(
             row()
                 .gap(10.0)
@@ -762,7 +791,9 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
 
     let inner = match &current {
         IslandState::Idle { battery } => render_idle(&state.clock_text, battery),
-        IslandState::NowPlaying { media } => render_now_playing(media, accent),
+        IslandState::NowPlaying { media } => {
+            render_now_playing(media, accent, state.waveform_phase)
+        }
         IslandState::Notification { notification } => render_notification(notification),
         IslandState::UpcomingEvent { event } => render_upcoming_event(event, accent),
         IslandState::Timer { timer } => render_timer(timer),
@@ -771,7 +802,13 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
             media,
             today_events,
             notifications,
-        } => render_hub(media.as_ref(), today_events, notifications, accent),
+        } => render_hub(
+            media.as_ref(),
+            today_events,
+            notifications,
+            &state.today_header,
+            accent,
+        ),
     };
 
     let pill = el()
@@ -880,12 +917,17 @@ fn main() {
     rune::run_windows_with(RunOptions { accessory: true }, |_| {
         let mut app = App::new(spec()).windowless();
 
+        let mut initial_state = AppState::default();
+        let loaded_settings = IslandSettings::load_default();
+        let top_margin = loaded_settings.top_offset_px.max(0.0);
+        initial_state.state_machine.set_settings(loaded_settings);
+
         let pill = app.overlay(
             OverlaySpec {
                 name: "Cay Island",
                 size: (860.0, 360.0),
                 edge: ScreenEdge::Top,
-                margin: 14.0,
+                margin: top_margin,
                 align: Align::Center,
                 inset: 0.0,
                 interactive: true,
@@ -896,7 +938,7 @@ fn main() {
                 prewarm: true,
                 ..Default::default()
             }),
-            AppState::default(),
+            initial_state,
         );
 
         pill.show();
@@ -904,45 +946,51 @@ fn main() {
         // Initialize Windows System Tray Icon & Context Menu
         let tray_pill = pill.clone();
         let tray_app = app.handle();
-        let tray =
-            Tray::new(
-                TraySpec::new("cay.island", "Cay", build_tray_icon())
-                    .tooltip("Cay Floating Island")
-                    .menu(build_tray_menu()),
-                move |event| match event {
-                    TrayEvent::Activate { .. } => {
-                        tray_pill.update(|s, _| s.state_machine.toggle_hub());
+        let tray = Tray::new(
+            TraySpec::new("cay.island", "Cay", build_tray_icon())
+                .tooltip("Cay Floating Island")
+                .menu(build_tray_menu()),
+            move |event| match event {
+                TrayEvent::Activate { .. } => {
+                    tray_pill.update(|s, _| s.state_machine.toggle_hub());
+                }
+                TrayEvent::Menu(id) => match id.as_str() {
+                    "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
+                    "accent_sky" => tray_pill.update(|s, _| {
+                        s.state_machine.set_accent(AccentPreset::Sky);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "accent_lime" => tray_pill.update(|s, _| {
+                        s.state_machine.set_accent(AccentPreset::Lime);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "accent_warm" => tray_pill.update(|s, _| {
+                        s.state_machine.set_accent(AccentPreset::Warm);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "accent_purple" => tray_pill.update(|s, _| {
+                        s.state_machine.set_accent(AccentPreset::Purple);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "toggle_hover" => tray_pill.update(|s, _| {
+                        let next = !s.state_machine.settings().hover_expand_enabled;
+                        s.state_machine.set_hover_expand_enabled(next);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "enable_autostart" => {
+                        #[cfg(windows)]
+                        let _ = set_windows_autostart(true);
                     }
-                    TrayEvent::Menu(id) => {
-                        match id.as_str() {
-                            "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
-                            "accent_sky" => tray_pill
-                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Sky)),
-                            "accent_lime" => tray_pill
-                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Lime)),
-                            "accent_warm" => tray_pill
-                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Warm)),
-                            "accent_purple" => tray_pill
-                                .update(|s, _| s.state_machine.set_accent(AccentPreset::Purple)),
-                            "toggle_hover" => tray_pill.update(|s, _| {
-                                let next = !s.state_machine.settings().hover_expand_enabled;
-                                s.state_machine.set_hover_expand_enabled(next);
-                            }),
-                            "enable_autostart" => {
-                                #[cfg(windows)]
-                                let _ = set_windows_autostart(true);
-                            }
-                            "disable_autostart" => {
-                                #[cfg(windows)]
-                                let _ = set_windows_autostart(false);
-                            }
-                            "quit" => tray_app.quit(),
-                            _ => {}
-                        }
+                    "disable_autostart" => {
+                        #[cfg(windows)]
+                        let _ = set_windows_autostart(false);
                     }
+                    "quit" => tray_app.quit(),
                     _ => {}
                 },
-            );
+                _ => {}
+            },
+        );
         // Keep Tray handle alive for the lifetime of the application
         if let Ok(tray_handle) = tray {
             std::mem::forget(tray_handle);
@@ -962,7 +1010,14 @@ fn main() {
                     let smtc = WinSmtcMediaProvider::new();
                     let sys = WinSystemProvider::new();
                     let notif = WinNotificationProvider::new();
-                    let cal = IcsCalendarProvider::default();
+                    let cal = IcsCalendarProvider::new(
+                        IslandSettings::load_default()
+                            .ics_source
+                            .map(std::path::PathBuf::from)
+                            .or_else(|| {
+                                std::env::var_os("CAY_ICS_PATH").map(std::path::PathBuf::from)
+                            }),
+                    );
 
                     if is_spike_probe {
                         std::thread::sleep(std::time::Duration::from_millis(600));
@@ -972,6 +1027,8 @@ fn main() {
                         let battery_res = sys.get_battery_status();
                         let smtc_res = smtc.get_current_media();
                         let notif_access = notif.probe_access_status();
+                        let (clock_now, today_now) = current_local_clock_and_date();
+                        let fullscreen_now = is_foreground_window_fullscreen();
 
                         tracing::info!(
                             availability = ?worker_pill.availability(),
@@ -979,6 +1036,9 @@ fn main() {
                             surface = ?worker_pill.surface_description(),
                             capabilities = ?worker_pill.capabilities(),
                             working_set_mb = format!("{ram_mb:.2}"),
+                            clock = %clock_now,
+                            today = %today_now,
+                            fullscreen_active = fullscreen_now,
                             battery = ?battery_res,
                             smtc_media = ?smtc_res,
                             notification_access = ?notif_access,
@@ -1020,18 +1080,47 @@ fn main() {
                     }
 
                     // Live background polling loop (1000ms interval on MTA worker thread)
+                    let mut was_fullscreen = false;
                     loop {
+                        let is_fullscreen = is_foreground_window_fullscreen();
+                        if is_fullscreen != was_fullscreen {
+                            was_fullscreen = is_fullscreen;
+                            if is_fullscreen {
+                                worker_pill.hide();
+                            } else {
+                                worker_pill.show();
+                            }
+                        }
+
+                        let (clock_now, today_now) = current_local_clock_and_date();
                         let battery_opt = sys.get_battery_status().ok();
                         let media_opt = smtc.get_current_media().ok().flatten();
+                        if let Some(bytes) = media_opt
+                            .as_ref()
+                            .and_then(|m| m.thumbnail_bytes.as_deref())
+                        {
+                            let _ = image_cache().load(bytes.to_vec());
+                        }
                         let toasts_opt = notif.get_recent_notifications().ok();
                         let meetings_opt = cal.get_upcoming_meetings(15).ok();
 
                         worker_pill.update_if(move |s, _| {
-                            let before = s.state_machine.current_state();
+                            let before_state = s.state_machine.current_state();
+                            let before_clock = s.clock_text.clone();
+                            let before_phase = s.waveform_phase;
+
+                            s.clock_text = clock_now;
+                            s.today_header = today_now;
+                            s.state_machine.set_fullscreen_concealed(is_fullscreen);
+
                             if let Some(bat) = battery_opt {
                                 s.state_machine.set_battery(bat);
                             }
+                            let is_playing_now = media_opt.as_ref().is_some_and(|m| m.is_playing);
                             s.state_machine.set_media(media_opt);
+                            if is_playing_now {
+                                s.waveform_phase = (s.waveform_phase + 1) % 5;
+                            }
                             if let Some(toasts) = toasts_opt {
                                 s.state_machine.sync_notifications(toasts);
                             }
@@ -1039,7 +1128,10 @@ fn main() {
                                 s.state_machine.set_upcoming_events(meetings);
                             }
                             let _ = s.state_machine.tick(1.0);
-                            s.state_machine.current_state() != before
+
+                            s.state_machine.current_state() != before_state
+                                || s.clock_text != before_clock
+                                || s.waveform_phase != before_phase
                         });
 
                         std::thread::sleep(std::time::Duration::from_millis(1000));

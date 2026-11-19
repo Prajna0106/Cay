@@ -2,12 +2,22 @@ use crate::traits::{MediaProvider, NotificationProvider, ProviderError, SystemPr
 use cay_core::models::{BatteryStatus, MediaInfo, ToastNotification};
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
+    GlobalSystemMediaTransportControlsSessionMediaProperties,
     GlobalSystemMediaTransportControlsSessionPlaybackStatus,
+};
+use windows::Storage::Streams::DataReader;
+use windows::Win32::Foundation::RECT;
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
+use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::Win32::UI::WindowsAndMessaging::{
+    GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetShellWindow, GetWindowRect,
+};
 use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
 };
@@ -126,6 +136,8 @@ impl MediaProvider for WinSmtcMediaProvider {
             return Ok(None);
         }
 
+        let thumbnail_bytes = read_smtc_thumbnail(&props);
+
         Ok(Some(MediaInfo {
             title,
             artist,
@@ -134,6 +146,7 @@ impl MediaProvider for WinSmtcMediaProvider {
             position_secs,
             duration_secs,
             source_app,
+            thumbnail_bytes,
         }))
     }
 
@@ -407,4 +420,116 @@ pub fn set_windows_autostart(enable: bool) -> Result<(), ProviderError> {
             .status();
     }
     Ok(())
+}
+
+/// Reads up to 2 MB of encoded image bytes from an SMTC session's thumbnail stream.
+fn read_smtc_thumbnail(
+    props: &GlobalSystemMediaTransportControlsSessionMediaProperties,
+) -> Option<Vec<u8>> {
+    let thumb_ref = props.Thumbnail().ok()?;
+    let stream = thumb_ref.OpenReadAsync().ok()?.join().ok()?;
+    let size = stream.Size().ok()?;
+    if size == 0 || size > 2 * 1024 * 1024 {
+        return None;
+    }
+    let len = u32::try_from(size).ok()?;
+    let reader = DataReader::CreateDataReader(&stream).ok()?;
+    let loaded = reader.LoadAsync(len).ok()?.join().ok()?;
+    if loaded == 0 {
+        return None;
+    }
+    let mut buf = vec![0_u8; loaded as usize];
+    reader.ReadBytes(&mut buf).ok()?;
+    let _ = reader.Close();
+    Some(buf)
+}
+
+/// Returns the formatted local 12-hour clock string (e.g. `"7:08 PM"`) and today header
+/// (e.g. `"TODAY · THU 19 NOV"`).
+pub fn current_local_clock_and_date() -> (String, String) {
+    // SAFETY: GetLocalTime takes no pointers and returns a value SYSTEMTIME struct.
+    let st = unsafe { GetLocalTime() };
+    let is_pm = st.wHour >= 12;
+    let hour12 = match st.wHour % 12 {
+        0 => 12,
+        h => h,
+    };
+    let am_pm = if is_pm { "PM" } else { "AM" };
+    let clock = format!("{hour12}:{:02} {am_pm}", st.wMinute);
+
+    let weekday = match st.wDayOfWeek {
+        0 => "SUN",
+        1 => "MON",
+        2 => "TUE",
+        3 => "WED",
+        4 => "THU",
+        5 => "FRI",
+        6 => "SAT",
+        _ => "DAY",
+    };
+    let month = match st.wMonth {
+        1 => "JAN",
+        2 => "FEB",
+        3 => "MAR",
+        4 => "APR",
+        5 => "MAY",
+        6 => "JUN",
+        7 => "JUL",
+        8 => "AUG",
+        9 => "SEP",
+        10 => "OCT",
+        11 => "NOV",
+        12 => "DEC",
+        _ => "MON",
+    };
+    let today_header = format!("TODAY · {weekday} {} {month}", st.wDay);
+    (clock, today_header)
+}
+
+/// Detects whether the current foreground application occupies the entire physical monitor
+/// (e.g. fullscreen game, fullscreen video player, or presentation).
+pub fn is_foreground_window_fullscreen() -> bool {
+    // SAFETY: Win32 window queries on thread-safe HWND handles.
+    unsafe {
+        let fg = GetForegroundWindow();
+        if fg.0.is_null() || fg == GetDesktopWindow() || fg == GetShellWindow() {
+            return false;
+        }
+
+        let mut class_buf = [0_u16; 64];
+        let class_len = GetClassNameW(fg, &mut class_buf);
+        if class_len > 0 {
+            let class_name = String::from_utf16_lossy(&class_buf[..class_len as usize]);
+            if matches!(
+                class_name.as_str(),
+                "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+            ) {
+                return false;
+            }
+        }
+
+        let mut win_rect = RECT::default();
+        if GetWindowRect(fg, &mut win_rect).is_err() {
+            return false;
+        }
+
+        let hmon = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+        if hmon.0.is_null() {
+            return false;
+        }
+
+        let mut mon_info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(hmon, &mut mon_info).as_bool() {
+            return false;
+        }
+
+        let m = mon_info.rcMonitor;
+        win_rect.left <= m.left
+            && win_rect.top <= m.top
+            && win_rect.right >= m.right
+            && win_rect.bottom >= m.bottom
+    }
 }
