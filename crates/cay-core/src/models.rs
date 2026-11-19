@@ -100,6 +100,14 @@ pub enum AccentPreset {
     Purple,
 }
 
+/// Multi-monitor targeting strategy (P1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum MonitorChoice {
+    #[default]
+    Primary,
+    UnderPointer,
+}
+
 /// User preferences for Cay island behavior and appearance.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IslandSettings {
@@ -110,6 +118,12 @@ pub struct IslandSettings {
     pub enable_notifications: bool,
     pub enable_calendar: bool,
     pub ics_source: Option<String>,
+    #[serde(default)]
+    pub monitor_choice: MonitorChoice,
+    #[serde(default)]
+    pub do_not_disturb: bool,
+    #[serde(default)]
+    pub blocked_notification_apps: Vec<String>,
 }
 
 impl Default for IslandSettings {
@@ -122,6 +136,9 @@ impl Default for IslandSettings {
             enable_notifications: true,
             enable_calendar: true,
             ics_source: None,
+            monitor_choice: MonitorChoice::Primary,
+            do_not_disturb: false,
+            blocked_notification_apps: Vec::new(),
         }
     }
 }
@@ -194,6 +211,9 @@ mod tests {
             enable_notifications: true,
             enable_calendar: false,
             ics_source: Some("C:\\Calendars\\work.ics".to_string()),
+            monitor_choice: MonitorChoice::UnderPointer,
+            do_not_disturb: true,
+            blocked_notification_apps: vec!["Discord".to_string()],
         };
 
         let json = serde_json::to_string(&settings).unwrap();

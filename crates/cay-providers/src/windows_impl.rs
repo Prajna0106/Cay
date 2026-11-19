@@ -10,7 +10,11 @@ use windows::Win32::Foundation::RECT;
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
-use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
+use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+use windows::Win32::System::Com::{
+    CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
+};
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
@@ -531,5 +535,20 @@ pub fn is_foreground_window_fullscreen() -> bool {
             && win_rect.top <= m.top
             && win_rect.right >= m.right
             && win_rect.bottom >= m.bottom
+    }
+}
+
+/// Queries the current Windows master audio output volume percentage (0..=100) via Core Audio
+/// (`IMMDeviceEnumerator` + `IAudioEndpointVolume`).
+pub fn get_system_master_volume_percent() -> Option<u8> {
+    init_mta();
+    // SAFETY: Standard COM activation on an MTA thread; pointers are managed by `windows` smart pointers.
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let device = enumerator.GetDefaultAudioEndpoint(eRender, eConsole).ok()?;
+        let endpoint_vol: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).ok()?;
+        let scalar = endpoint_vol.GetMasterVolumeLevelScalar().ok()?;
+        Some((scalar.clamp(0.0, 1.0) * 100.0).round() as u8)
     }
 }

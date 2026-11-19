@@ -1,21 +1,21 @@
 use cay_core::models::{
     AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
-    TimerState, ToastNotification,
+    MonitorChoice, TimerState, ToastNotification,
 };
 use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine};
 #[cfg(windows)]
 use cay_providers::{
-    current_local_clock_and_date, init_mta, is_foreground_window_fullscreen, open_external_url,
-    process_working_set_bytes, set_windows_autostart, WinNotificationProvider,
-    WinSmtcMediaProvider, WinSystemProvider,
+    current_local_clock_and_date, get_system_master_volume_percent, init_mta,
+    is_foreground_window_fullscreen, open_external_url, process_working_set_bytes,
+    set_windows_autostart, WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
 };
 use cay_providers::{
     CalendarProvider, IcsCalendarProvider, MediaProvider, NotificationProvider, SystemProvider,
 };
 use rune::{
-    col, el, icon, row, text, Align, App, AppSpec, Color, Cx, El, Icon, ImageCache, OverlayInput,
-    OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, SurfaceFit, TextStyle, Tray,
-    TrayEvent, TrayIcon, TrayItem, TraySpec, WindowSpec,
+    col, el, icon, row, text, Align, App, AppSpec, Color, Cx, DisplayTarget, El, Icon, ImageCache,
+    OverlayInput, OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, SurfaceFit,
+    TextStyle, Tray, TrayEvent, TrayIcon, TrayItem, TraySpec, WindowSpec,
 };
 use std::sync::{Arc, OnceLock};
 
@@ -859,11 +859,19 @@ fn build_tray_menu() -> Vec<TrayItem> {
     vec![
         TrayItem::action("toggle_hub", "Toggle Expanded Hub"),
         TrayItem::Separator,
+        TrayItem::action("timer_start_25", "Focus Timer: Start 25 min"),
+        TrayItem::action("timer_pause_resume", "Focus Timer: Pause / Resume"),
+        TrayItem::action("timer_stop", "Focus Timer: Stop"),
+        TrayItem::Separator,
         TrayItem::action("accent_sky", "Accent: Sky (#7CC4FF)"),
         TrayItem::action("accent_lime", "Accent: Lime (#A3E635)"),
         TrayItem::action("accent_warm", "Accent: Warm (#FFB86B)"),
         TrayItem::action("accent_purple", "Accent: Purple (#F0ABFC)"),
         TrayItem::Separator,
+        TrayItem::action("monitor_primary", "Display: Primary Monitor"),
+        TrayItem::action("monitor_pointer", "Display: Follow Pointer Monitor"),
+        TrayItem::Separator,
+        TrayItem::action("toggle_dnd", "Toggle Do Not Disturb (Suppress Peeks)"),
         TrayItem::action("toggle_hover", "Toggle Hover Expansion"),
         TrayItem::action("enable_autostart", "Enable Start with Windows"),
         TrayItem::action("disable_autostart", "Disable Start with Windows"),
@@ -920,6 +928,10 @@ fn main() {
         let mut initial_state = AppState::default();
         let loaded_settings = IslandSettings::load_default();
         let top_margin = loaded_settings.top_offset_px.max(0.0);
+        let initial_display = match loaded_settings.monitor_choice {
+            MonitorChoice::Primary => DisplayTarget::Primary,
+            MonitorChoice::UnderPointer => DisplayTarget::UnderPointer,
+        };
         initial_state.state_machine.set_settings(loaded_settings);
 
         let pill = app.overlay(
@@ -934,6 +946,7 @@ fn main() {
                 view: island_view,
             }
             .options(OverlayOptions {
+                display: initial_display,
                 input: OverlayInput::Regions,
                 prewarm: true,
                 ..Default::default()
@@ -956,6 +969,15 @@ fn main() {
                 }
                 TrayEvent::Menu(id) => match id.as_str() {
                     "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
+                    "timer_start_25" => tray_pill.update(|s, _| {
+                        s.state_machine.start_focus_timer(25 * 60, "Focus");
+                    }),
+                    "timer_pause_resume" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_timer_pause();
+                    }),
+                    "timer_stop" => tray_pill.update(|s, _| {
+                        s.state_machine.stop_timer();
+                    }),
                     "accent_sky" => tray_pill.update(|s, _| {
                         s.state_machine.set_accent(AccentPreset::Sky);
                         let _ = s.state_machine.settings().save_default();
@@ -970,6 +992,27 @@ fn main() {
                     }),
                     "accent_purple" => tray_pill.update(|s, _| {
                         s.state_machine.set_accent(AccentPreset::Purple);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "monitor_primary" => {
+                        tray_pill.set_display(DisplayTarget::Primary);
+                        tray_pill.update(|s, _| {
+                            s.state_machine.set_monitor_choice(MonitorChoice::Primary);
+                            let _ = s.state_machine.settings().save_default();
+                        });
+                    }
+                    "monitor_pointer" => {
+                        tray_pill.set_display(DisplayTarget::UnderPointer);
+                        tray_pill.refollow_pointer();
+                        tray_pill.update(|s, _| {
+                            s.state_machine
+                                .set_monitor_choice(MonitorChoice::UnderPointer);
+                            let _ = s.state_machine.settings().save_default();
+                        });
+                    }
+                    "toggle_dnd" => tray_pill.update(|s, _| {
+                        let next = !s.state_machine.is_do_not_disturb();
+                        s.state_machine.set_do_not_disturb(next);
                         let _ = s.state_machine.settings().save_default();
                     }),
                     "toggle_hover" => tray_pill.update(|s, _| {
@@ -1029,6 +1072,7 @@ fn main() {
                         let notif_access = notif.probe_access_status();
                         let (clock_now, today_now) = current_local_clock_and_date();
                         let fullscreen_now = is_foreground_window_fullscreen();
+                        let volume_now = get_system_master_volume_percent();
 
                         tracing::info!(
                             availability = ?worker_pill.availability(),
@@ -1039,6 +1083,7 @@ fn main() {
                             clock = %clock_now,
                             today = %today_now,
                             fullscreen_active = fullscreen_now,
+                            volume_percent = ?volume_now,
                             battery = ?battery_res,
                             smtc_media = ?smtc_res,
                             notification_access = ?notif_access,
@@ -1081,6 +1126,7 @@ fn main() {
 
                     // Live background polling loop (1000ms interval on MTA worker thread)
                     let mut was_fullscreen = false;
+                    let mut last_volume = get_system_master_volume_percent();
                     loop {
                         let is_fullscreen = is_foreground_window_fullscreen();
                         if is_fullscreen != was_fullscreen {
@@ -1091,6 +1137,17 @@ fn main() {
                                 worker_pill.show();
                             }
                         }
+
+                        // Step pointer-display tracking if DisplayTarget::UnderPointer is active
+                        worker_pill.refollow_pointer();
+
+                        let current_vol = get_system_master_volume_percent();
+                        let changed_vol = if current_vol.is_some() && current_vol != last_volume {
+                            last_volume = current_vol;
+                            current_vol
+                        } else {
+                            None
+                        };
 
                         let (clock_now, today_now) = current_local_clock_and_date();
                         let battery_opt = sys.get_battery_status().ok();
@@ -1113,6 +1170,12 @@ fn main() {
                             s.today_header = today_now;
                             s.state_machine.set_fullscreen_concealed(is_fullscreen);
 
+                            if let Some(vol) = changed_vol {
+                                s.state_machine.trigger_hud(HudState {
+                                    kind: HudKind::Volume,
+                                    level_percent: vol,
+                                });
+                            }
                             if let Some(bat) = battery_opt {
                                 s.state_machine.set_battery(bat);
                             }

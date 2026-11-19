@@ -65,12 +65,12 @@ flowchart LR
 
 **Goal**: Deep system integration and power-user workflows.
 
-### Scope
-- **Volume & Brightness HUD**: Intercept system volume/brightness keystrokes and display replacing the native Windows flyout.
-- **Timer & Focus Capsule**: Pomodoro / focus timer with countdown and audible or visual completion alert.
-- **Multi-Monitor Settings**: Display selector allowing users to pin Cay to secondary displays or track cursor position.
-- **Notification Whitelist/Blacklist**: User interface in Hub/Settings to filter out noisy apps.
-- **Windows Focus Assist / DND Sync**: Island dims or suppresses notification peeks when Windows Focus is engaged.
+### Scope & Verification Status
+- [x] **Volume HUD**: Queries Windows Core Audio (`IMMDeviceEnumerator` + `IAudioEndpointVolume`) on background MTA thread and triggers 2.0-second Volume HUD flyout on master volume change.
+- [x] **Timer & Focus Capsule**: 25-minute Focus countdown timer (`start_focus_timer`, `toggle_timer_pause`, `stop_timer`) with 1-second stepping in `IslandStateMachine::tick` and System Tray controls.
+- [x] **Multi-Monitor Settings**: Display target selector (`MonitorChoice::Primary` vs `MonitorChoice::UnderPointer` with `refollow_pointer()`) persisted in `%APPDATA%\Cay\settings.json`.
+- [x] **Notification App Allow/Deny Filter**: `blocked_notification_apps` list in `IslandSettings` filtering out unwanted app toasts.
+- [x] **Do Not Disturb (DND) Sync**: `do_not_disturb` mode suppressing 5.0-second notification peeks while silently queuing unread notifications in the Expanded Hub.
 
 ---
 

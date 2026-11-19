@@ -1,6 +1,6 @@
 use crate::models::{
-    AccentPreset, BatteryStatus, CalendarMeeting, HudState, IslandSettings, MediaInfo, TimerState,
-    ToastNotification,
+    AccentPreset, BatteryStatus, CalendarMeeting, HudState, IslandSettings, MediaInfo,
+    MonitorChoice, TimerState, ToastNotification,
 };
 use serde::{Deserialize, Serialize};
 
@@ -158,6 +158,7 @@ pub struct IslandStateMachine {
     peek_remaining_secs: f32,
     upcoming_events: Vec<CalendarMeeting>,
     active_timer: Option<TimerState>,
+    timer_frac_secs: f32,
     active_hud: Option<HudState>,
     hud_remaining_secs: f32,
     battery_status: BatteryStatus,
@@ -179,6 +180,7 @@ impl Default for IslandStateMachine {
             peek_remaining_secs: 0.0,
             upcoming_events: Vec::new(),
             active_timer: None,
+            timer_frac_secs: 0.0,
             active_hud: None,
             hud_remaining_secs: 0.0,
             battery_status: BatteryStatus::default(),
@@ -233,6 +235,29 @@ impl IslandStateMachine {
         self.settings.accent = accent;
     }
 
+    pub fn set_monitor_choice(&mut self, choice: MonitorChoice) {
+        self.settings.monitor_choice = choice;
+    }
+
+    pub fn is_do_not_disturb(&self) -> bool {
+        self.settings.do_not_disturb
+    }
+
+    pub fn set_do_not_disturb(&mut self, dnd: bool) {
+        self.settings.do_not_disturb = dnd;
+        if dnd {
+            self.peek_remaining_secs = 0.0;
+        }
+        self.recompute_state();
+    }
+
+    pub fn is_app_blocked(&self, app_name: &str) -> bool {
+        self.settings
+            .blocked_notification_apps
+            .iter()
+            .any(|blocked| blocked.eq_ignore_ascii_case(app_name.trim()))
+    }
+
     pub fn is_fullscreen_concealed(&self) -> bool {
         self.is_fullscreen_concealed
     }
@@ -259,8 +284,12 @@ impl IslandStateMachine {
         self.latest_media.as_ref()
     }
 
-    /// Pushes a newly arrived toast notification and triggers the 5.0-second peek window.
+    /// Pushes a newly arrived toast notification and triggers the 5.0-second peek window
+    /// (unless filtered by `blocked_notification_apps` or suppressed by Do Not Disturb).
     pub fn push_notification(&mut self, notification: ToastNotification) {
+        if self.is_app_blocked(&notification.app_name) {
+            return;
+        }
         if !self.seen_notification_ids.contains(&notification.id) {
             self.seen_notification_ids.push(notification.id);
         }
@@ -270,7 +299,9 @@ impl IslandStateMachine {
         if self.active_notifications.len() > 10 {
             self.active_notifications.truncate(10);
         }
-        self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
+        if !self.settings.do_not_disturb {
+            self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
+        }
         self.recompute_state();
     }
 
@@ -279,6 +310,9 @@ impl IslandStateMachine {
     pub fn sync_notifications(&mut self, toasts: Vec<ToastNotification>) {
         let mut has_new = false;
         for toast in toasts {
+            if self.is_app_blocked(&toast.app_name) {
+                continue;
+            }
             if !self.seen_notification_ids.contains(&toast.id) {
                 self.seen_notification_ids.push(toast.id);
                 self.active_notifications.retain(|n| n.id != toast.id);
@@ -289,7 +323,7 @@ impl IslandStateMachine {
         if self.active_notifications.len() > 10 {
             self.active_notifications.truncate(10);
         }
-        if has_new {
+        if has_new && !self.settings.do_not_disturb {
             self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
         }
         self.recompute_state();
@@ -313,6 +347,30 @@ impl IslandStateMachine {
 
     pub fn set_timer(&mut self, timer: Option<TimerState>) {
         self.active_timer = timer;
+        self.timer_frac_secs = 0.0;
+        self.recompute_state();
+    }
+
+    pub fn start_focus_timer(&mut self, duration_secs: u32, label: impl Into<String>) {
+        self.active_timer = Some(TimerState {
+            label: label.into(),
+            remaining_seconds: duration_secs,
+            is_running: true,
+        });
+        self.timer_frac_secs = 0.0;
+        self.recompute_state();
+    }
+
+    pub fn toggle_timer_pause(&mut self) {
+        if let Some(timer) = &mut self.active_timer {
+            timer.is_running = !timer.is_running;
+        }
+        self.recompute_state();
+    }
+
+    pub fn stop_timer(&mut self) {
+        self.active_timer = None;
+        self.timer_frac_secs = 0.0;
         self.recompute_state();
     }
 
@@ -333,8 +391,8 @@ impl IslandStateMachine {
         self.recompute_state();
     }
 
-    /// Steps time-dependent state durations (5.0s notification peek, 2.0s HUD interrupt).
-    /// Returns `true` if the resolved island state changed.
+    /// Steps time-dependent state durations (5.0s notification peek, 2.0s HUD interrupt,
+    /// and 1.0s active focus timer countdown). Returns `true` if the resolved island state changed.
     pub fn tick(&mut self, dt_secs: f32) -> bool {
         let before = self.current_state();
 
@@ -349,17 +407,34 @@ impl IslandStateMachine {
             }
         }
 
+        if let Some(timer) = &mut self.active_timer {
+            if timer.is_running {
+                self.timer_frac_secs += dt_secs.max(0.0);
+                let elapsed_whole = self.timer_frac_secs.floor() as u32;
+                if elapsed_whole > 0 {
+                    self.timer_frac_secs -= elapsed_whole as f32;
+                    timer.remaining_seconds = timer.remaining_seconds.saturating_sub(elapsed_whole);
+                    if timer.remaining_seconds == 0 {
+                        self.active_timer = None;
+                        self.timer_frac_secs = 0.0;
+                    }
+                }
+            }
+        }
+
         self.recompute_state();
         self.current_state() != before
     }
 
     fn recompute_state(&mut self) {
-        let peek_notification =
-            if self.settings.enable_notifications && self.peek_remaining_secs > 0.0 {
-                self.active_notifications.first()
-            } else {
-                None
-            };
+        let peek_notification = if self.settings.enable_notifications
+            && !self.settings.do_not_disturb
+            && self.peek_remaining_secs > 0.0
+        {
+            self.active_notifications.first()
+        } else {
+            None
+        };
         let next_event = if self.settings.enable_calendar {
             self.upcoming_events.first()
         } else {
@@ -553,6 +628,80 @@ mod tests {
         if let IslandState::Hub { notifications, .. } = sm.current_state() {
             assert_eq!(notifications.len(), 1);
             assert_eq!(notifications[0].id, 42);
+        } else {
+            panic!("Expected Hub state");
+        }
+    }
+
+    #[test]
+    fn test_focus_timer_countdown_and_completion() {
+        let mut sm = IslandStateMachine::new();
+        sm.start_focus_timer(3, "Focus");
+        assert!(matches!(
+            sm.current_state(),
+            IslandState::Timer {
+                timer: TimerState {
+                    remaining_seconds: 3,
+                    ..
+                }
+            }
+        ));
+
+        // 1 second elapsed -> 2 seconds left
+        assert!(sm.tick(1.0));
+        assert!(matches!(
+            sm.current_state(),
+            IslandState::Timer {
+                timer: TimerState {
+                    remaining_seconds: 2,
+                    ..
+                }
+            }
+        ));
+
+        // Pause timer -> tick does not decrement
+        sm.toggle_timer_pause();
+        let _ = sm.tick(2.0);
+        // Resume timer -> 2 more seconds completes timer and reverts to Idle
+        sm.toggle_timer_pause();
+        assert!(sm.tick(2.0));
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+    }
+
+    #[test]
+    fn test_notification_blocked_apps_and_do_not_disturb() {
+        let mut sm = IslandStateMachine::new();
+        sm.settings_mut()
+            .blocked_notification_apps
+            .push("Discord".to_string());
+
+        // Blocked app notification is ignored completely
+        sm.push_notification(ToastNotification {
+            id: 1,
+            app_name: "discord".into(),
+            channel: None,
+            sender: "User".into(),
+            message: "Spam".into(),
+            received_timestamp: 0,
+        });
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+
+        // Enable Do Not Disturb: allowed app notification is added to Hub list without peeking
+        sm.set_do_not_disturb(true);
+        sm.push_notification(ToastNotification {
+            id: 2,
+            app_name: "Slack".into(),
+            channel: None,
+            sender: "Priya".into(),
+            message: "Silent message".into(),
+            received_timestamp: 0,
+        });
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+
+        sm.toggle_hub();
+        if let IslandState::Hub { notifications, .. } = sm.current_state() {
+            assert_eq!(notifications.len(), 1);
+            assert_eq!(notifications[0].id, 2);
         } else {
             panic!("Expected Hub state");
         }
