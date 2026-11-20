@@ -18,14 +18,16 @@ use windows::Win32::System::Com::{
 use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
-use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId};
 use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_NOREPEAT, MOD_WIN};
 use windows::Win32::UI::Shell::{
-    SHQueryUserNotificationState, QUNS_ACCEPTS_NOTIFICATIONS, QUNS_APP,
+    SHQueryUserNotificationState, QUNS_ACCEPTS_NOTIFICATIONS, QUNS_APP, QUNS_PRESENTATION_MODE,
+    QUNS_RUNNING_D3D_FULL_SCREEN,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetMessageW, GetShellWindow,
-    GetWindowRect, MSG, WM_HOTKEY,
+    GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+    GWL_EXSTYLE, GWL_STYLE, MSG, WM_HOTKEY, WS_CAPTION, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
@@ -498,6 +500,17 @@ pub fn current_local_clock_and_date() -> (String, String) {
 /// Detects whether the current foreground application occupies the entire physical monitor
 /// (e.g. fullscreen game, fullscreen video player, or presentation).
 pub fn is_foreground_window_fullscreen() -> bool {
+    // 1. Direct3D exclusive fullscreen or presentation mode via Windows Shell
+    // SAFETY: SHQueryUserNotificationState queries shell user notification state.
+    unsafe {
+        if let Ok(state) = SHQueryUserNotificationState() {
+            if state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE {
+                return true;
+            }
+        }
+    }
+
+    // 2. Query foreground window for borderless fullscreen (e.g. F11 browser/video, borderless games)
     // SAFETY: Win32 window queries on thread-safe HWND handles.
     unsafe {
         let fg = GetForegroundWindow();
@@ -505,16 +518,48 @@ pub fn is_foreground_window_fullscreen() -> bool {
             return false;
         }
 
+        // Must be visible and not minimized/iconic
+        if !IsWindowVisible(fg).as_bool() || IsIconic(fg).as_bool() {
+            return false;
+        }
+
+        // Ignore Cay's own windows
+        let mut pid = 0;
+        GetWindowThreadProcessId(fg, Some(&mut pid));
+        if pid == GetCurrentProcessId() {
+            return false;
+        }
+
+        // Exclude Windows shell & desktop classes
         let mut class_buf = [0_u16; 64];
         let class_len = GetClassNameW(fg, &mut class_buf);
         if class_len > 0 {
             let class_name = String::from_utf16_lossy(&class_buf[..class_len as usize]);
             if matches!(
                 class_name.as_str(),
-                "Progman" | "WorkerW" | "Shell_TrayWnd" | "Shell_SecondaryTrayWnd"
+                "Progman"
+                    | "WorkerW"
+                    | "Shell_TrayWnd"
+                    | "Shell_SecondaryTrayWnd"
+                    | "SHELLDLL_DefView"
+                    | "SysListView32"
+                    | "Windows.UI.Core.CoreWindow"
             ) {
                 return false;
             }
+        }
+
+        // Standard windowed applications have WS_CAPTION (titlebar with minimize/maximize/close).
+        // A true borderless fullscreen game or F11 window strips WS_CAPTION.
+        let style = GetWindowLongW(fg, GWL_STYLE) as u32;
+        if (style & WS_CAPTION.0) == WS_CAPTION.0 {
+            return false;
+        }
+
+        // Overlays, tool windows, and floating panels are not fullscreen games
+        let ex_style = GetWindowLongW(fg, GWL_EXSTYLE) as u32;
+        if (ex_style & WS_EX_TOOLWINDOW.0) != 0 || (ex_style & WS_EX_NOACTIVATE.0) != 0 {
+            return false;
         }
 
         let mut win_rect = RECT::default();
@@ -590,4 +635,15 @@ pub fn spawn_global_hotkey_listener(on_hotkey: impl Fn() + Send + 'static) {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_is_foreground_window_fullscreen_safe_execution() {
+        // Must safely query Windows without crashing or throwing SEH exceptions
+        let _ = is_foreground_window_fullscreen();
+    }
 }
