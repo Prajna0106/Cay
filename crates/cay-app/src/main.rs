@@ -153,6 +153,7 @@ const FONT_BODY_SEMIBOLD: TextStyle = TextStyle::new(13.0, 600.0);
 const FONT_META: TextStyle = TextStyle::new(12.0, 400.0);
 const FONT_META_TABULAR: TextStyle = TextStyle::new(12.0, 400.0).features("'tnum' 1");
 const FONT_CAPS_LABEL: TextStyle = TextStyle::new(11.0, 600.0).tracking(0.8);
+const FONT_CHIP: TextStyle = TextStyle::new(10.0, 600.0);
 const FONT_TIMER: TextStyle = TextStyle::new(16.0, 600.0).features("'tnum' 1");
 
 // Motion Token: 450ms spring with 0.2 bounce
@@ -620,10 +621,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         );
     }
 
-    // Media app control toggle chips
-    let media_apps = ["Spotify", "Chrome", "Edge", "VLC"];
-    let mut media_chips = row().gap(5.0).center_y();
-    for app_name in media_apps {
+    // Media app control toggle chips (arranged in 2 rows to prevent horizontal overflow)
+    let make_media_chip = |app_name: &'static str| {
         let is_enabled = state.state_machine.is_media_app_enabled(app_name);
         let chip_bg = if is_enabled { PILL_BG } else { TRACK_BG };
         let chip_border = if is_enabled {
@@ -638,22 +637,39 @@ fn render_hub(state: &AppState, accent: Color) -> El {
             format!("{app_name} ✕")
         };
         let app_str = app_name.to_string();
-        media_chips = media_chips.child(
-            el().key(format!("chip-media-{app_name}"))
-                .role("button")
-                .label(format!("Toggle media control for {app_name}"))
-                .px(7.0)
-                .py(2.0)
-                .radius(8.0)
-                .fill(chip_bg)
-                .border(1.0, chip_border)
-                .on_press(move |s: &mut AppState| {
-                    s.state_machine.toggle_media_app(&app_str);
-                    let _ = s.state_machine.settings().save_default();
-                })
-                .child(text(chip_label).font(FONT_CAPS_LABEL).color(chip_color)),
+        el().key(format!("chip-media-{app_name}"))
+            .role("button")
+            .label(format!("Toggle media control for {app_name}"))
+            .px(7.0)
+            .py(2.0)
+            .radius(7.0)
+            .fill(chip_bg)
+            .border(1.0, chip_border)
+            .on_press(move |s: &mut AppState| {
+                s.state_machine.toggle_media_app(&app_str);
+                let _ = s.state_machine.settings().save_default();
+            })
+            .child(text(chip_label).font(FONT_CHIP).color(chip_color))
+    };
+
+    let media_chips = col()
+        .w_full()
+        .min_w(0.0)
+        .gap(4.0)
+        .child(
+            row()
+                .gap(5.0)
+                .center_y()
+                .child(make_media_chip("Spotify"))
+                .child(make_media_chip("Chrome")),
+        )
+        .child(
+            row()
+                .gap(5.0)
+                .center_y()
+                .child(make_media_chip("Edge"))
+                .child(make_media_chip("VLC")),
         );
-    }
 
     let title_display = truncate_preview(&active_media.title, 18);
     let artist_display = truncate_preview(&active_media.artist, 14);
@@ -936,10 +952,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
             .child(text("Open calendar").font(FONT_META).color(accent)),
     );
 
-    // Card 3: Recent Notifications + App Notification Filters
-    let notif_apps = ["Slack", "WhatsApp", "Teams", "Discord", "Outlook"];
-    let mut notif_chips = row().gap(4.0).center_y();
-    for app_name in notif_apps {
+    // Card 3: Recent Notifications + App Notification Filters (arranged in 2 rows to prevent overflow)
+    let make_notif_chip = |app_name: &'static str| {
         let is_enabled = state.state_machine.is_notification_app_enabled(app_name);
         let chip_bg = if is_enabled { PILL_BG } else { TRACK_BG };
         let chip_border = if is_enabled {
@@ -954,22 +968,40 @@ fn render_hub(state: &AppState, accent: Color) -> El {
             format!("{app_name} ✕")
         };
         let app_str = app_name.to_string();
-        notif_chips = notif_chips.child(
-            el().key(format!("chip-notif-{app_name}"))
-                .role("button")
-                .label(format!("Toggle notifications for {app_name}"))
-                .px(6.0)
-                .py(2.0)
-                .radius(8.0)
-                .fill(chip_bg)
-                .border(1.0, chip_border)
-                .on_press(move |s: &mut AppState| {
-                    s.state_machine.toggle_notification_app(&app_str);
-                    let _ = s.state_machine.settings().save_default();
-                })
-                .child(text(chip_label).font(FONT_CAPS_LABEL).color(chip_color)),
+        el().key(format!("chip-notif-{app_name}"))
+            .role("button")
+            .label(format!("Toggle notifications for {app_name}"))
+            .px(6.0)
+            .py(2.0)
+            .radius(7.0)
+            .fill(chip_bg)
+            .border(1.0, chip_border)
+            .on_press(move |s: &mut AppState| {
+                s.state_machine.toggle_notification_app(&app_str);
+                let _ = s.state_machine.settings().save_default();
+            })
+            .child(text(chip_label).font(FONT_CHIP).color(chip_color))
+    };
+
+    let notif_chips = col()
+        .w_full()
+        .min_w(0.0)
+        .gap(4.0)
+        .child(
+            row()
+                .gap(4.0)
+                .center_y()
+                .child(make_notif_chip("Slack"))
+                .child(make_notif_chip("WhatsApp")),
+        )
+        .child(
+            row()
+                .gap(4.0)
+                .center_y()
+                .child(make_notif_chip("Teams"))
+                .child(make_notif_chip("Discord"))
+                .child(make_notif_chip("Outlook")),
         );
-    }
 
     let tile_bgs = [NOTIF_SLACK_BG, NOTIF_WHATSAPP_BG, NOTIF_GITHUB_BG];
     let notifications = state.state_machine.active_notifications();
