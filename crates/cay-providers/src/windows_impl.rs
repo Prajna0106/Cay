@@ -19,8 +19,13 @@ use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::GetCurrentProcess;
+use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_NOREPEAT, MOD_WIN};
+use windows::Win32::UI::Shell::{
+    SHQueryUserNotificationState, QUNS_ACCEPTS_NOTIFICATIONS, QUNS_APP,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetShellWindow, GetWindowRect,
+    GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetMessageW, GetShellWindow,
+    GetWindowRect, MSG, WM_HOTKEY,
 };
 use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
@@ -551,4 +556,38 @@ pub fn get_system_master_volume_percent() -> Option<u8> {
         let scalar = endpoint_vol.GetMasterVolumeLevelScalar().ok()?;
         Some((scalar.clamp(0.0, 1.0) * 100.0).round() as u8)
     }
+}
+
+/// Queries Windows Shell (`SHQueryUserNotificationState`) to determine whether Focus Assist,
+/// Quiet Hours, Presentation Mode, or D3D Fullscreen mode is currently suppressing notifications.
+pub fn is_windows_quiet_hours_active() -> bool {
+    // SAFETY: SHQueryUserNotificationState takes a valid pointer to a stack-allocated enum.
+    unsafe {
+        let Ok(state) = SHQueryUserNotificationState() else {
+            return false;
+        };
+        state != QUNS_ACCEPTS_NOTIFICATIONS && state != QUNS_APP
+    }
+}
+
+/// Spawns a dedicated background message thread that registers the global shortcut `Win + Alt + I`
+/// and invokes `on_hotkey` whenever the user presses it.
+pub fn spawn_global_hotkey_listener(on_hotkey: impl Fn() + Send + 'static) {
+    let _ = std::thread::Builder::new()
+        .name("cay-hotkey-listener".into())
+        .spawn(move || {
+            // SAFETY: RegisterHotKey and GetMessageW operate on this thread's win32 message queue.
+            unsafe {
+                let mods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
+                if RegisterHotKey(None, 1, mods, u32::from(b'I')).is_err() {
+                    return;
+                }
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
+                    if msg.message == WM_HOTKEY {
+                        on_hotkey();
+                    }
+                }
+            }
+        });
 }

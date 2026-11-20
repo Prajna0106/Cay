@@ -70,7 +70,9 @@ flowchart LR
 - [x] **Timer & Focus Capsule**: 25-minute Focus countdown timer (`start_focus_timer`, `toggle_timer_pause`, `stop_timer`) with 1-second stepping in `IslandStateMachine::tick` and System Tray controls.
 - [x] **Multi-Monitor Settings**: Display target selector (`MonitorChoice::Primary` vs `MonitorChoice::UnderPointer` with `refollow_pointer()`) persisted in `%APPDATA%\Cay\settings.json`.
 - [x] **Notification App Allow/Deny Filter**: `blocked_notification_apps` list in `IslandSettings` filtering out unwanted app toasts.
-- [x] **Do Not Disturb (DND) Sync**: `do_not_disturb` mode suppressing 5.0-second notification peeks while silently queuing unread notifications in the Expanded Hub.
+- [x] **Do Not Disturb (DND) & Windows Focus Assist Sync**: Manual `do_not_disturb` setting plus automatic Windows Shell Quiet Hours / Focus Assist detection (`SHQueryUserNotificationState`) suppressing 5.0-second notification peeks while silently queuing unread notifications in the Expanded Hub.
+- [x] **Keyboard Accessibility & Global Hotkey**: Global `Win + Alt + I` shortcut (`RegisterHotKey`) to toggle the Expanded Hub from anywhere on Windows, plus `Esc` key handler to collapse the Hub.
+- [x] **Multi-Item Expanded Hub Cards**: Up to 3 upcoming events (with accent, warm, and neutral 3 px color bars and clickable "Open calendar" link) and up to 3 recent notifications (with app initial badges).
 
 ---
 

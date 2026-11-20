@@ -14,6 +14,7 @@ pub use traits::{
 #[cfg(windows)]
 pub use windows_impl::{
     current_local_clock_and_date, get_system_master_volume_percent, init_mta,
-    is_foreground_window_fullscreen, open_external_url, process_working_set_bytes,
-    set_windows_autostart, WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
+    is_foreground_window_fullscreen, is_windows_quiet_hours_active, open_external_url,
+    process_working_set_bytes, set_windows_autostart, spawn_global_hotkey_listener,
+    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
 };

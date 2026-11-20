@@ -151,6 +151,7 @@ pub struct IslandStateMachine {
     is_hub_expanded: bool,
     is_hovered: bool,
     is_fullscreen_concealed: bool,
+    os_quiet_hours_active: bool,
     settings: IslandSettings,
     latest_media: Option<MediaInfo>,
     active_notifications: Vec<ToastNotification>,
@@ -173,6 +174,7 @@ impl Default for IslandStateMachine {
             is_hub_expanded: false,
             is_hovered: false,
             is_fullscreen_concealed: false,
+            os_quiet_hours_active: false,
             settings: IslandSettings::default(),
             latest_media: None,
             active_notifications: Vec::new(),
@@ -243,9 +245,21 @@ impl IslandStateMachine {
         self.settings.do_not_disturb
     }
 
+    pub fn is_effective_dnd(&self) -> bool {
+        self.settings.do_not_disturb || self.os_quiet_hours_active
+    }
+
     pub fn set_do_not_disturb(&mut self, dnd: bool) {
         self.settings.do_not_disturb = dnd;
-        if dnd {
+        if self.is_effective_dnd() {
+            self.peek_remaining_secs = 0.0;
+        }
+        self.recompute_state();
+    }
+
+    pub fn set_os_quiet_hours(&mut self, active: bool) {
+        self.os_quiet_hours_active = active;
+        if self.is_effective_dnd() {
             self.peek_remaining_secs = 0.0;
         }
         self.recompute_state();
@@ -299,7 +313,7 @@ impl IslandStateMachine {
         if self.active_notifications.len() > 10 {
             self.active_notifications.truncate(10);
         }
-        if !self.settings.do_not_disturb {
+        if !self.is_effective_dnd() {
             self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
         }
         self.recompute_state();
@@ -323,7 +337,7 @@ impl IslandStateMachine {
         if self.active_notifications.len() > 10 {
             self.active_notifications.truncate(10);
         }
-        if has_new && !self.settings.do_not_disturb {
+        if has_new && !self.is_effective_dnd() {
             self.peek_remaining_secs = NOTIFICATION_PEEK_DURATION_SECS;
         }
         self.recompute_state();
@@ -428,7 +442,7 @@ impl IslandStateMachine {
 
     fn recompute_state(&mut self) {
         let peek_notification = if self.settings.enable_notifications
-            && !self.settings.do_not_disturb
+            && !self.is_effective_dnd()
             && self.peek_remaining_secs > 0.0
         {
             self.active_notifications.first()

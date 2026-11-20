@@ -6,16 +6,17 @@ use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine};
 #[cfg(windows)]
 use cay_providers::{
     current_local_clock_and_date, get_system_master_volume_percent, init_mta,
-    is_foreground_window_fullscreen, open_external_url, process_working_set_bytes,
-    set_windows_autostart, WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
+    is_foreground_window_fullscreen, is_windows_quiet_hours_active, open_external_url,
+    process_working_set_bytes, set_windows_autostart, spawn_global_hotkey_listener,
+    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
 };
 use cay_providers::{
     CalendarProvider, IcsCalendarProvider, MediaProvider, NotificationProvider, SystemProvider,
 };
 use rune::{
     col, el, icon, row, text, Align, App, AppSpec, Color, Cx, DisplayTarget, El, Icon, ImageCache,
-    OverlayInput, OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring, SurfaceFit,
-    TextStyle, Tray, TrayEvent, TrayIcon, TrayItem, TraySpec, WindowSpec,
+    Key, KeyEvent, OverlayInput, OverlayOptions, OverlaySpec, RunOptions, ScreenEdge, Spring,
+    SurfaceFit, TextStyle, Tray, TrayEvent, TrayIcon, TrayItem, TraySpec, Tx, WindowSpec,
 };
 use std::sync::{Arc, OnceLock};
 
@@ -104,6 +105,24 @@ const NOTIF_SLACK_BG: Color = Color {
     b: 0.0704,
     a: 1.0,
 }; // #4A154B
+const NOTIF_WHATSAPP_BG: Color = Color {
+    r: 0.0137,
+    g: 0.0437,
+    b: 0.0252,
+    a: 1.0,
+}; // #1F3B2C
+const NOTIF_GITHUB_BG: Color = Color {
+    r: 0.0242,
+    g: 0.0284,
+    b: 0.0423,
+    a: 1.0,
+}; // #2B2F3A
+const CAL_NEUTRAL_BAR: Color = Color {
+    r: 0.1470,
+    g: 0.1470,
+    b: 0.1878,
+    a: 1.0,
+}; // #6B6B78
 const CAL_TILE_BG: Color = Color {
     r: 0.0116,
     g: 0.0232,
@@ -549,6 +568,7 @@ fn render_hub(
     // Card 1: Now Playing
     let media_card = col()
         .grow(1.0)
+        .min_w(0.0)
         .h_full()
         .padding(16.0)
         .gap(12.0)
@@ -658,65 +678,122 @@ fn render_hub(
                 ),
         );
 
-    // Card 2: Today's Calendar
-    let first_event_title = today_events
-        .first()
-        .map(|e| e.title.as_str())
-        .unwrap_or("Design review");
-    let today_card = col()
+    // Card 2: Today's Calendar (up to 3 items with accent, warm, and grey 3px bars)
+    let bar_colors = [accent, ACCENT_WARM, CAL_NEUTRAL_BAR];
+    let event_rows: Vec<(String, String, Color)> = if today_events.len() >= 2 {
+        today_events
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(i, evt)| {
+                let sub = format!("{} min · {}", evt.duration_minutes, evt.service_name);
+                (evt.title.clone(), sub, bar_colors[i % bar_colors.len()])
+            })
+            .collect()
+    } else {
+        let first_title = today_events
+            .first()
+            .map(|e| e.title.clone())
+            .unwrap_or_else(|| "Design review".to_string());
+        vec![
+            (first_title, "7:20 – 8:00 PM · Teams".to_string(), accent),
+            ("Gym".to_string(), "8:30 – 9:30 PM".to_string(), ACCENT_WARM),
+            (
+                "Call with Mom".to_string(),
+                "10:00 PM".to_string(),
+                CAL_NEUTRAL_BAR,
+            ),
+        ]
+    };
+
+    let mut today_card = col()
         .grow(1.0)
+        .min_w(0.0)
         .h_full()
         .padding(16.0)
         .gap(10.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
-        .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED))
-        .child(
-            row()
-                .gap(10.0)
-                .center_y()
-                .child(el().size(3.0, 34.0).radius(2.0).fill(accent))
-                .child(
-                    col()
-                        .gap(2.0)
-                        .child(
-                            text(first_event_title)
-                                .font(FONT_PRIMARY_LINE)
-                                .color(TEXT_PRIMARY),
-                        )
-                        .child(
-                            text("7:20 – 8:00 PM · Teams")
-                                .font(FONT_META)
-                                .color(TEXT_MUTED),
-                        ),
-                ),
-        )
-        .child(
-            row()
-                .gap(10.0)
-                .center_y()
-                .child(el().size(3.0, 34.0).radius(2.0).fill(ACCENT_WARM))
-                .child(
-                    col()
-                        .gap(2.0)
-                        .child(text("Gym").font(FONT_PRIMARY_LINE).color(TEXT_PRIMARY))
-                        .child(text("8:30 – 9:30 PM").font(FONT_META).color(TEXT_MUTED)),
-                ),
-        )
-        .child(el().grow(1.0))
-        .child(text("Open calendar").font(FONT_META).color(accent));
+        .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED));
 
-    // Card 3: Recent Notifications
-    let first_sender = notifications
-        .first()
-        .map(|n| n.sender.as_str())
-        .unwrap_or("Priya Sharma");
-    let first_msg = notifications
-        .first()
-        .map(|n| n.message.as_str())
-        .unwrap_or("Can you share the island PRD…");
-    let notif_card = col()
+    for (title, sub, bar_color) in event_rows {
+        today_card = today_card.child(
+            row()
+                .gap(10.0)
+                .center_y()
+                .child(el().size(3.0, 34.0).radius(2.0).fill(bar_color))
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(text(title).font(FONT_PRIMARY_LINE).color(TEXT_PRIMARY))
+                        .child(text(sub).font(FONT_META).color(TEXT_MUTED)),
+                ),
+        );
+    }
+
+    today_card = today_card.child(el().grow(1.0)).child(
+        el().key("hub-btn-open-cal")
+            .role("button")
+            .label("Open calendar")
+            .on_press(|_: &mut AppState| {
+                #[cfg(windows)]
+                let _ = open_external_url("https://calendar.google.com");
+            })
+            .child(text("Open calendar").font(FONT_META).color(accent)),
+    );
+
+    // Card 3: Recent Notifications (up to 3 items)
+    let tile_bgs = [NOTIF_SLACK_BG, NOTIF_WHATSAPP_BG, NOTIF_GITHUB_BG];
+    let notif_rows: Vec<(String, String, String, Color)> = if notifications.len() >= 2 {
+        notifications
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(i, n)| {
+                let badge = n
+                    .app_name
+                    .chars()
+                    .next()
+                    .unwrap_or('N')
+                    .to_ascii_uppercase()
+                    .to_string();
+                (
+                    badge,
+                    n.sender.clone(),
+                    n.message.clone(),
+                    tile_bgs[i % tile_bgs.len()],
+                )
+            })
+            .collect()
+    } else {
+        let first_sender = notifications
+            .first()
+            .map(|n| n.sender.clone())
+            .unwrap_or_else(|| "Priya Sharma".to_string());
+        let first_msg = notifications
+            .first()
+            .map(|n| n.message.clone())
+            .unwrap_or_else(|| "Can you share the island PRD…".to_string());
+        vec![
+            ("S".to_string(), first_sender, first_msg, NOTIF_SLACK_BG),
+            (
+                "W".to_string(),
+                "WhatsApp · Family".to_string(),
+                "Dinner at 9?".to_string(),
+                NOTIF_WHATSAPP_BG,
+            ),
+            (
+                "G".to_string(),
+                "GitHub".to_string(),
+                "PR #42 was approved".to_string(),
+                NOTIF_GITHUB_BG,
+            ),
+        ]
+    };
+
+    let mut notif_card = col()
         .grow(1.0)
+        .min_w(0.0)
         .h_full()
         .padding(16.0)
         .gap(10.0)
@@ -745,29 +822,36 @@ fn render_hub(
                         })
                         .child(text("Clear").font(FONT_META).color(TEXT_MUTED)),
                 ),
-        )
-        .child(
+        );
+
+    for (badge, sender, msg, tile_bg) in notif_rows {
+        let preview = if msg.chars().count() > 28 {
+            let prefix: String = msg.chars().take(28).collect();
+            format!("{prefix}…")
+        } else {
+            msg
+        };
+        notif_card = notif_card.child(
             row()
                 .gap(10.0)
                 .center_y()
                 .child(
                     el().size(32.0, 32.0)
                         .radius(10.0)
-                        .fill(NOTIF_SLACK_BG)
+                        .fill(tile_bg)
                         .center()
-                        .child(text("S").font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
+                        .child(text(badge).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
                 )
                 .child(
                     col()
+                        .grow(1.0)
+                        .min_w(0.0)
                         .gap(2.0)
-                        .child(
-                            text(first_sender)
-                                .font(FONT_BODY_SEMIBOLD)
-                                .color(TEXT_PRIMARY),
-                        )
-                        .child(text(first_msg).font(FONT_META).color(TEXT_MUTED)),
+                        .child(text(sender).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
+                        .child(text(preview).font(FONT_META).color(TEXT_MUTED)),
                 ),
         );
+    }
 
     row()
         .key("content-hub")
@@ -880,8 +964,17 @@ fn build_tray_menu() -> Vec<TrayItem> {
     ]
 }
 
+fn handle_key(s: &mut AppState, event: &KeyEvent, _: &mut Tx) -> bool {
+    if event.key == Key::Escape && s.state_machine.is_hub_open() {
+        s.state_machine.close_hub();
+        return true;
+    }
+    false
+}
+
 fn spec() -> AppSpec<AppState> {
     AppSpec {
+        on_key: Some(handle_key),
         scenes: &[
             ("idle", |s| {
                 *s = AppState::default();
@@ -950,11 +1043,21 @@ fn main() {
                 input: OverlayInput::Regions,
                 prewarm: true,
                 ..Default::default()
-            }),
+            })
+            .on_key(handle_key),
             initial_state,
         );
 
         pill.show();
+
+        // Register global keyboard shortcut `Win + Alt + I` to toggle the Expanded Hub
+        #[cfg(windows)]
+        {
+            let hotkey_pill = pill.clone();
+            spawn_global_hotkey_listener(move || {
+                hotkey_pill.update(|s, _| s.state_machine.toggle_hub());
+            });
+        }
 
         // Initialize Windows System Tray Icon & Context Menu
         let tray_pill = pill.clone();
@@ -1073,6 +1176,7 @@ fn main() {
                         let (clock_now, today_now) = current_local_clock_and_date();
                         let fullscreen_now = is_foreground_window_fullscreen();
                         let volume_now = get_system_master_volume_percent();
+                        let quiet_hours_now = is_windows_quiet_hours_active();
 
                         tracing::info!(
                             availability = ?worker_pill.availability(),
@@ -1083,6 +1187,7 @@ fn main() {
                             clock = %clock_now,
                             today = %today_now,
                             fullscreen_active = fullscreen_now,
+                            quiet_hours_active = quiet_hours_now,
                             volume_percent = ?volume_now,
                             battery = ?battery_res,
                             smtc_media = ?smtc_res,
@@ -1150,6 +1255,7 @@ fn main() {
                         };
 
                         let (clock_now, today_now) = current_local_clock_and_date();
+                        let quiet_hours_now = is_windows_quiet_hours_active();
                         let battery_opt = sys.get_battery_status().ok();
                         let media_opt = smtc.get_current_media().ok().flatten();
                         if let Some(bytes) = media_opt
@@ -1169,6 +1275,7 @@ fn main() {
                             s.clock_text = clock_now;
                             s.today_header = today_now;
                             s.state_machine.set_fullscreen_concealed(is_fullscreen);
+                            s.state_machine.set_os_quiet_hours(quiet_hours_now);
 
                             if let Some(vol) = changed_vol {
                                 s.state_machine.trigger_hud(HudState {
