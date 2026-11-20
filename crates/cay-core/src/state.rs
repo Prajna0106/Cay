@@ -266,10 +266,93 @@ impl IslandStateMachine {
     }
 
     pub fn is_app_blocked(&self, app_name: &str) -> bool {
+        let app_lower = app_name.trim().to_lowercase();
         self.settings
             .blocked_notification_apps
             .iter()
-            .any(|blocked| blocked.eq_ignore_ascii_case(app_name.trim()))
+            .any(|blocked| {
+                let b_lower = blocked.trim().to_lowercase();
+                b_lower == app_lower || app_lower.contains(&b_lower) || b_lower.contains(&app_lower)
+            })
+    }
+
+    pub fn toggle_notification_app(&mut self, app_name: &str) -> bool {
+        let trimmed = app_name.trim();
+        let app_lower = trimmed.to_lowercase();
+        if let Some(pos) = self
+            .settings
+            .blocked_notification_apps
+            .iter()
+            .position(|a| a.to_lowercase() == app_lower)
+        {
+            self.settings.blocked_notification_apps.remove(pos);
+            self.recompute_state();
+            true // now enabled
+        } else {
+            self.settings
+                .blocked_notification_apps
+                .push(trimmed.to_string());
+            let blocked = self.settings.blocked_notification_apps.clone();
+            self.active_notifications.retain(|n| {
+                let app_lower = n.app_name.trim().to_lowercase();
+                !blocked.iter().any(|b| {
+                    let b_lower = b.trim().to_lowercase();
+                    b_lower == app_lower
+                        || app_lower.contains(&b_lower)
+                        || b_lower.contains(&app_lower)
+                })
+            });
+            self.recompute_state();
+            false // now blocked
+        }
+    }
+
+    pub fn is_notification_app_enabled(&self, app_name: &str) -> bool {
+        !self.is_app_blocked(app_name)
+    }
+
+    pub fn is_media_app_blocked(&self, source_app: &str) -> bool {
+        let app_lower = source_app.trim().to_lowercase();
+        self.settings.blocked_media_apps.iter().any(|blocked| {
+            let b_lower = blocked.trim().to_lowercase();
+            b_lower == app_lower || app_lower.contains(&b_lower) || b_lower.contains(&app_lower)
+        })
+    }
+
+    pub fn toggle_media_app(&mut self, app_name: &str) -> bool {
+        let trimmed = app_name.trim();
+        let app_lower = trimmed.to_lowercase();
+        if let Some(pos) = self
+            .settings
+            .blocked_media_apps
+            .iter()
+            .position(|a| a.to_lowercase() == app_lower)
+        {
+            self.settings.blocked_media_apps.remove(pos);
+            self.recompute_state();
+            true // now enabled
+        } else {
+            self.settings.blocked_media_apps.push(trimmed.to_string());
+            if let Some(current) = &self.latest_media {
+                if self.is_media_app_blocked(&current.source_app) {
+                    self.latest_media = None;
+                }
+            }
+            self.recompute_state();
+            false // now blocked
+        }
+    }
+
+    pub fn is_media_app_enabled(&self, app_name: &str) -> bool {
+        !self.is_media_app_blocked(app_name)
+    }
+
+    pub fn upcoming_events(&self) -> &[CalendarMeeting] {
+        &self.upcoming_events
+    }
+
+    pub fn active_notifications(&self) -> &[ToastNotification] {
+        &self.active_notifications
     }
 
     pub fn is_fullscreen_concealed(&self) -> bool {
@@ -290,6 +373,13 @@ impl IslandStateMachine {
     }
 
     pub fn set_media(&mut self, media: Option<MediaInfo>) {
+        if let Some(ref m) = media {
+            if self.is_media_app_blocked(&m.source_app) {
+                self.latest_media = None;
+                self.recompute_state();
+                return;
+            }
+        }
         self.latest_media = media;
         self.recompute_state();
     }
@@ -719,5 +809,53 @@ mod tests {
         } else {
             panic!("Expected Hub state");
         }
+    }
+
+    #[test]
+    fn test_app_control_toggles_and_media_blocking() {
+        let mut sm = IslandStateMachine::new();
+
+        // Notification toggles
+        assert!(sm.is_notification_app_enabled("Slack"));
+        assert!(!sm.toggle_notification_app("Slack")); // now blocked
+        assert!(!sm.is_notification_app_enabled("Slack"));
+        assert!(sm.toggle_notification_app("Slack")); // now unblocked
+        assert!(sm.is_notification_app_enabled("Slack"));
+
+        // Media app toggles & filtering
+        assert!(sm.is_media_app_enabled("Chrome"));
+        sm.set_media(Some(MediaInfo {
+            title: "YouTube Video".into(),
+            artist: "Channel".into(),
+            source_app: "Google Chrome".into(),
+            is_playing: true,
+            ..Default::default()
+        }));
+        assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
+
+        // Block Chrome media
+        assert!(!sm.toggle_media_app("Chrome")); // blocked
+        assert!(!sm.is_media_app_enabled("Chrome"));
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+
+        // Attempting to set Chrome media when blocked yields Idle
+        sm.set_media(Some(MediaInfo {
+            title: "Another Video".into(),
+            artist: "Creator".into(),
+            source_app: "chrome.exe".into(),
+            is_playing: true,
+            ..Default::default()
+        }));
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+
+        // Allowed media (e.g. Spotify) still works
+        sm.set_media(Some(MediaInfo {
+            title: "Song".into(),
+            artist: "Artist".into(),
+            source_app: "Spotify".into(),
+            is_playing: true,
+            ..Default::default()
+        }));
+        assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
     }
 }

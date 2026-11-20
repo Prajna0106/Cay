@@ -235,6 +235,17 @@ fn format_mm_ss(seconds: f64) -> String {
     format!("{mins}:{secs:02}")
 }
 
+fn truncate_preview(text: &str, max_chars: usize) -> String {
+    let clean = text.replace(['\r', '\n'], " ");
+    let trimmed = clean.trim();
+    if trimmed.chars().count() > max_chars {
+        let prefix: String = trimmed.chars().take(max_chars).collect();
+        format!("{prefix}…")
+    } else {
+        trimmed.to_string()
+    }
+}
+
 fn image_cache() -> &'static ImageCache {
     static CACHE: OnceLock<ImageCache> = OnceLock::new();
     CACHE.get_or_init(|| ImageCache::new(Arc::new(|| {})))
@@ -361,11 +372,13 @@ fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -
         );
     }
 
-    let artist_text = if media.artist.is_empty() {
+    let title_text = truncate_preview(&media.title, 18);
+    let artist_str = if media.artist.is_empty() {
         format!("· {}", media.source_app)
     } else {
         format!("· {}", media.artist)
     };
+    let artist_text = truncate_preview(&artist_str, 16);
 
     row()
         .key("content-now-playing")
@@ -383,10 +396,11 @@ fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -
         .child(
             row()
                 .grow(1.0)
+                .min_w(0.0)
                 .gap(6.0)
                 .center_y()
                 .child(
-                    text(&media.title)
+                    text(title_text)
                         .font(FONT_BODY_SEMIBOLD)
                         .color(TEXT_PRIMARY),
                 )
@@ -407,6 +421,10 @@ fn render_notification(notif: &ToastNotification) -> El {
         .unwrap_or('N')
         .to_ascii_uppercase()
         .to_string();
+
+    let header_display = truncate_preview(&header_left, 24);
+    let sender_display = truncate_preview(&notif.sender, 28);
+    let message_display = truncate_preview(&notif.message, 38);
 
     row()
         .key("content-notification")
@@ -429,25 +447,31 @@ fn render_notification(notif: &ToastNotification) -> El {
         .child(
             col()
                 .grow(1.0)
+                .min_w(0.0)
                 .gap(2.0)
                 .child(
                     row()
                         .w_full()
-                        .child(text(header_left).font(FONT_META).color(TEXT_MUTED))
+                        .min_w(0.0)
+                        .child(text(header_display).font(FONT_META).color(TEXT_MUTED))
                         .child(el().grow(1.0))
                         .child(text("now").font(FONT_META).color(TEXT_MUTED)),
                 )
                 .child(
-                    text(&notif.sender)
+                    text(sender_display)
                         .font(FONT_PRIMARY_LINE)
                         .color(TEXT_PRIMARY),
                 )
-                .child(text(&notif.message).font(FONT_BODY).color(TEXT_SECONDARY)),
+                .child(text(message_display).font(FONT_BODY).color(TEXT_SECONDARY)),
         )
 }
 
 fn render_upcoming_event(event: &CalendarMeeting, accent: Color) -> El {
     let join_url = event.join_url.clone();
+    let title_display = truncate_preview(&event.title, 18);
+    let sub_str = format!("in 12 min · {}", event.service_name);
+    let sub_display = truncate_preview(&sub_str, 22);
+
     row()
         .key("content-upcoming-event")
         .w_full()
@@ -475,17 +499,14 @@ fn render_upcoming_event(event: &CalendarMeeting, accent: Color) -> El {
         .child(
             col()
                 .grow(1.0)
+                .min_w(0.0)
                 .gap(2.0)
                 .child(
-                    text(&event.title)
+                    text(title_display)
                         .font(FONT_PRIMARY_LINE)
                         .color(TEXT_PRIMARY),
                 )
-                .child(
-                    text(format!("in 12 min · {}", event.service_name))
-                        .font(FONT_META)
-                        .color(TEXT_MUTED),
-                ),
+                .child(text(sub_display).font(FONT_META).color(TEXT_MUTED)),
         )
         .child(
             el().key("event-btn-join")
@@ -508,6 +529,8 @@ fn render_upcoming_event(event: &CalendarMeeting, accent: Color) -> El {
 fn render_timer(timer: &TimerState) -> El {
     let mins = timer.remaining_seconds / 60;
     let secs = timer.remaining_seconds % 60;
+    let label_display = truncate_preview(&timer.label, 14);
+
     row()
         .key("content-timer")
         .w_full()
@@ -516,16 +539,17 @@ fn render_timer(timer: &TimerState) -> El {
         .center_y()
         .child(
             row()
+                .grow(1.0)
+                .min_w(0.0)
                 .gap(8.0)
                 .center_y()
                 .child(icon(&ICON_TIMER, 18.0).color(ACCENT_WARM))
                 .child(
-                    text(&timer.label)
+                    text(label_display)
                         .font(FONT_BODY_SEMIBOLD)
                         .color(TEXT_PRIMARY),
                 ),
         )
-        .child(el().grow(1.0))
         .child(
             text(format!("{mins:02}:{secs:02}"))
                 .font(FONT_TIMER)
@@ -557,26 +581,22 @@ fn render_hud(hud: &HudState) -> El {
         )
 }
 
-fn render_hub(
-    media: Option<&MediaInfo>,
-    today_events: &[CalendarMeeting],
-    notifications: &[ToastNotification],
-    today_header: &str,
-    accent: Color,
-) -> El {
+fn render_hub(state: &AppState, accent: Color) -> El {
     let default_media = sample_media();
-    let active_media = media.unwrap_or(&default_media);
-    let source_app = if active_media.source_app.is_empty() {
+    let media_opt = state.state_machine.latest_media();
+    let active_media = media_opt.unwrap_or(&default_media);
+    let raw_source = if active_media.source_app.is_empty() {
         "MUSIC".to_string()
     } else {
         active_media.source_app.to_ascii_uppercase()
     };
+    let source_app = truncate_preview(&raw_source, 16);
     let ratio = if active_media.duration_secs > 0.0 {
         (active_media.position_secs / active_media.duration_secs).clamp(0.0, 1.0) as f32
     } else {
         0.42
     };
-    let fill_px = (228.0 * ratio).round();
+    let fill_px = (216.0 * ratio).round().clamp(0.0, 216.0);
     let pos_label = format_mm_ss(active_media.position_secs);
     let dur_label = format_mm_ss(active_media.duration_secs);
     let play_pause_icon = if active_media.is_playing {
@@ -600,133 +620,185 @@ fn render_hub(
         );
     }
 
+    // Media app control toggle chips
+    let media_apps = ["Spotify", "Chrome", "Edge", "VLC"];
+    let mut media_chips = row().gap(5.0).center_y();
+    for app_name in media_apps {
+        let is_enabled = state.state_machine.is_media_app_enabled(app_name);
+        let chip_bg = if is_enabled { PILL_BG } else { TRACK_BG };
+        let chip_border = if is_enabled {
+            CAL_FEATURED_BORDER
+        } else {
+            ISLAND_BORDER
+        };
+        let chip_color = if is_enabled { accent } else { TEXT_MUTED };
+        let chip_label = if is_enabled {
+            format!("{app_name} ✓")
+        } else {
+            format!("{app_name} ✕")
+        };
+        let app_str = app_name.to_string();
+        media_chips = media_chips.child(
+            el().key(format!("chip-media-{app_name}"))
+                .role("button")
+                .label(format!("Toggle media control for {app_name}"))
+                .px(7.0)
+                .py(2.0)
+                .radius(8.0)
+                .fill(chip_bg)
+                .border(1.0, chip_border)
+                .on_press(move |s: &mut AppState| {
+                    s.state_machine.toggle_media_app(&app_str);
+                    let _ = s.state_machine.settings().save_default();
+                })
+                .child(text(chip_label).font(FONT_CAPS_LABEL).color(chip_color)),
+        );
+    }
+
+    let title_display = truncate_preview(&active_media.title, 18);
+    let artist_display = truncate_preview(&active_media.artist, 14);
+
     // Card 1: Now Playing
-    let media_card =
-        col()
-            .grow(1.0)
-            .min_w(0.0)
-            .h_full()
-            .padding(16.0)
-            .gap(10.0)
-            .radius(22.0)
-            .fill(CARD_SURFACE)
-            .child(
-                row()
-                    .gap(6.0)
-                    .center_y()
-                    .child(icon(&ICON_MUSIC, 11.0).color(TEXT_MUTED))
-                    .child(text(source_app).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
-            )
-            .child(
-                row()
-                    .gap(12.0)
-                    .center_y()
-                    .child(render_album_tile(
-                        68.0,
-                        14.0,
-                        28.0,
-                        active_media.thumbnail_bytes.as_deref(),
-                    ))
-                    .child(
-                        col()
-                            .grow(1.0)
-                            .min_w(0.0)
-                            .gap(5.0)
-                            .child(
-                                text(&active_media.title)
-                                    .font(FONT_CARD_TITLE)
-                                    .color(TEXT_PRIMARY),
-                            )
-                            .child(row().gap(6.0).center_y().child(mini_wave).child(
-                                text(&active_media.artist).font(FONT_BODY).color(TEXT_MUTED),
-                            )),
-                    ),
-            )
-            .child(
-                col()
-                    .gap(5.0)
-                    .child(
-                        el().w_full()
-                            .h(5.0)
-                            .radius(3.0)
-                            .fill(TRACK_BG)
-                            .child(el().size(fill_px, 5.0).radius(3.0).fill(accent)),
-                    )
-                    .child(
-                        row()
-                            .w_full()
-                            .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
-                            .child(el().grow(1.0))
-                            .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
-                    ),
-            )
-            .child(el().grow(1.0))
-            .child(
-                row()
-                    .w_full()
-                    .center()
-                    .gap(18.0)
-                    .child(
-                        el().key("hub-btn-prev")
-                            .role("button")
-                            .label("Previous track")
-                            .size(44.0, 44.0)
-                            .center()
-                            .on_press(|_: &mut AppState| {
-                                #[cfg(windows)]
-                                std::thread::spawn(|| {
-                                    let _ = WinSmtcMediaProvider::new().previous_track();
-                                });
-                            })
-                            .child(icon(&ICON_PREV, 20.0).color(TEXT_SECONDARY)),
-                    )
-                    .child(
-                        el().key("hub-btn-play-pause")
-                            .role("button")
-                            .label(if is_currently_playing {
-                                "Pause"
-                            } else {
-                                "Play"
-                            })
-                            .size(44.0, 44.0)
-                            .radius(22.0)
-                            .fill(TEXT_PRIMARY)
-                            .center()
-                            .on_press(move |s: &mut AppState| {
-                                if let Some(mut m) = s.state_machine.latest_media().cloned() {
-                                    m.is_playing = !m.is_playing;
-                                    s.state_machine.set_media(Some(m));
+    let media_card = col()
+        .grow(1.0)
+        .min_w(0.0)
+        .h_full()
+        .padding(14.0)
+        .gap(8.0)
+        .radius(22.0)
+        .fill(CARD_SURFACE)
+        .child(
+            row()
+                .w_full()
+                .min_w(0.0)
+                .center_y()
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(&ICON_MUSIC, 11.0).color(TEXT_MUTED))
+                        .child(text(source_app).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+                )
+                .child(el().grow(1.0))
+                .child(text("MEDIA CTRL").font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+        )
+        .child(media_chips)
+        .child(
+            row()
+                .w_full()
+                .min_w(0.0)
+                .gap(10.0)
+                .center_y()
+                .child(render_album_tile(
+                    58.0,
+                    12.0,
+                    24.0,
+                    active_media.thumbnail_bytes.as_deref(),
+                ))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .min_w(0.0)
+                        .gap(4.0)
+                        .child(
+                            text(title_display)
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .center_y()
+                                .child(mini_wave)
+                                .child(text(artist_display).font(FONT_BODY).color(TEXT_MUTED)),
+                        ),
+                ),
+        )
+        .child(
+            col()
+                .gap(4.0)
+                .child(
+                    el().w_full()
+                        .h(5.0)
+                        .radius(3.0)
+                        .fill(TRACK_BG)
+                        .child(el().size(fill_px, 5.0).radius(3.0).fill(accent)),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
+                        .child(el().grow(1.0))
+                        .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .w_full()
+                .center()
+                .gap(16.0)
+                .child(
+                    el().key("hub-btn-prev")
+                        .role("button")
+                        .label("Previous track")
+                        .size(38.0, 38.0)
+                        .center()
+                        .on_press(|_: &mut AppState| {
+                            #[cfg(windows)]
+                            std::thread::spawn(|| {
+                                let _ = WinSmtcMediaProvider::new().previous_track();
+                            });
+                        })
+                        .child(icon(&ICON_PREV, 18.0).color(TEXT_SECONDARY)),
+                )
+                .child(
+                    el().key("hub-btn-play-pause")
+                        .role("button")
+                        .label(if is_currently_playing {
+                            "Pause"
+                        } else {
+                            "Play"
+                        })
+                        .size(42.0, 42.0)
+                        .radius(21.0)
+                        .fill(TEXT_PRIMARY)
+                        .center()
+                        .on_press(move |s: &mut AppState| {
+                            if let Some(mut m) = s.state_machine.latest_media().cloned() {
+                                m.is_playing = !m.is_playing;
+                                s.state_machine.set_media(Some(m));
+                            }
+                            #[cfg(windows)]
+                            std::thread::spawn(move || {
+                                let smtc = WinSmtcMediaProvider::new();
+                                if is_currently_playing {
+                                    let _ = smtc.pause();
+                                } else {
+                                    let _ = smtc.play();
                                 }
-                                #[cfg(windows)]
-                                std::thread::spawn(move || {
-                                    let smtc = WinSmtcMediaProvider::new();
-                                    if is_currently_playing {
-                                        let _ = smtc.pause();
-                                    } else {
-                                        let _ = smtc.play();
-                                    }
-                                });
-                            })
-                            .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
-                    )
-                    .child(
-                        el().key("hub-btn-next")
-                            .role("button")
-                            .label("Next track")
-                            .size(44.0, 44.0)
-                            .center()
-                            .on_press(|_: &mut AppState| {
-                                #[cfg(windows)]
-                                std::thread::spawn(|| {
-                                    let _ = WinSmtcMediaProvider::new().next_track();
-                                });
-                            })
-                            .child(icon(&ICON_NEXT, 20.0).color(TEXT_SECONDARY)),
-                    ),
-            );
+                            });
+                        })
+                        .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
+                )
+                .child(
+                    el().key("hub-btn-next")
+                        .role("button")
+                        .label("Next track")
+                        .size(38.0, 38.0)
+                        .center()
+                        .on_press(|_: &mut AppState| {
+                            #[cfg(windows)]
+                            std::thread::spawn(|| {
+                                let _ = WinSmtcMediaProvider::new().next_track();
+                            });
+                        })
+                        .child(icon(&ICON_NEXT, 18.0).color(TEXT_SECONDARY)),
+                ),
+        );
 
     // Card 2: Today's Calendar
-    // Featured event: first real or sample event with outlined sky-tinted block
+    let today_events = state.state_machine.upcoming_events();
     let bar_colors = [accent, ACCENT_WARM, CAL_NEUTRAL_BAR];
     let (featured_title, featured_sub, featured_svc, secondary_rows) = if today_events.len() >= 2 {
         let feat = &today_events[0];
@@ -777,12 +849,15 @@ fn render_hub(
         )
     };
 
+    let feat_title_disp = truncate_preview(&featured_title, 15);
+    let feat_meta_disp = truncate_preview(&format!("{} · {}", featured_sub, featured_svc), 20);
+
     let mut today_card = col()
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(16.0)
-        .gap(10.0)
+        .padding(14.0)
+        .gap(8.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
         .child(
@@ -790,57 +865,62 @@ fn render_hub(
                 .gap(6.0)
                 .center_y()
                 .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
-                .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+                .child(
+                    text(truncate_preview(&state.today_header, 24))
+                        .font(FONT_CAPS_LABEL)
+                        .color(TEXT_MUTED),
+                ),
         )
-        // Featured event block with sky-tinted border
         .child(
             col()
                 .w_full()
-                .padding(10.0)
-                .gap(4.0)
+                .min_w(0.0)
+                .padding(8.0)
+                .gap(3.0)
                 .radius(12.0)
                 .fill(CAL_TILE_BG)
                 .border(1.0, CAL_FEATURED_BORDER)
                 .child(
                     row()
                         .w_full()
+                        .min_w(0.0)
                         .center_y()
                         .child(
-                            text(featured_title)
-                                .font(FONT_PRIMARY_LINE)
-                                .color(TEXT_PRIMARY),
+                            col().grow(1.0).min_w(0.0).child(
+                                text(feat_title_disp)
+                                    .font(FONT_PRIMARY_LINE)
+                                    .color(TEXT_PRIMARY),
+                            ),
                         )
-                        .child(el().grow(1.0))
-                        // Countdown pill "in X min"
                         .child(
-                            el().px(8.0)
-                                .py(3.0)
-                                .radius(10.0)
+                            el().px(7.0)
+                                .py(2.0)
+                                .radius(8.0)
                                 .fill(PILL_BG)
                                 .border(1.0, CAL_FEATURED_BORDER)
                                 .child(text("JOIN").font(FONT_CAPS_LABEL).color(accent)),
                         ),
                 )
-                .child(
-                    text(format!("{} · {}", featured_sub, featured_svc))
-                        .font(FONT_META)
-                        .color(TEXT_MUTED),
-                ),
+                .child(text(feat_meta_disp).font(FONT_META).color(TEXT_MUTED)),
         );
 
     for (title, sub, bar_color) in secondary_rows {
+        let t_disp = truncate_preview(&title, 18);
+        let s_disp = truncate_preview(&sub, 22);
         today_card = today_card.child(
             row()
-                .gap(10.0)
+                .w_full()
+                .min_w(0.0)
+                .gap(8.0)
                 .center_y()
-                .child(el().size(3.0, 32.0).radius(2.0).fill(bar_color))
+                .child(el().size(3.0, 28.0).radius(1.5).fill(bar_color))
                 .child(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
                         .gap(2.0)
-                        .child(text(title).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
-                        .child(text(sub).font(FONT_META).color(TEXT_MUTED)),
+                        .child(text(t_disp).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
+                        .child(text(s_disp).font(FONT_META).color(TEXT_MUTED)),
                 ),
         );
     }
@@ -856,9 +936,44 @@ fn render_hub(
             .child(text("Open calendar").font(FONT_META).color(accent)),
     );
 
-    // Card 3: Recent Notifications
+    // Card 3: Recent Notifications + App Notification Filters
+    let notif_apps = ["Slack", "WhatsApp", "Teams", "Discord", "Outlook"];
+    let mut notif_chips = row().gap(4.0).center_y();
+    for app_name in notif_apps {
+        let is_enabled = state.state_machine.is_notification_app_enabled(app_name);
+        let chip_bg = if is_enabled { PILL_BG } else { TRACK_BG };
+        let chip_border = if is_enabled {
+            CAL_FEATURED_BORDER
+        } else {
+            ISLAND_BORDER
+        };
+        let chip_color = if is_enabled { accent } else { TEXT_MUTED };
+        let chip_label = if is_enabled {
+            format!("{app_name} ✓")
+        } else {
+            format!("{app_name} ✕")
+        };
+        let app_str = app_name.to_string();
+        notif_chips = notif_chips.child(
+            el().key(format!("chip-notif-{app_name}"))
+                .role("button")
+                .label(format!("Toggle notifications for {app_name}"))
+                .px(6.0)
+                .py(2.0)
+                .radius(8.0)
+                .fill(chip_bg)
+                .border(1.0, chip_border)
+                .on_press(move |s: &mut AppState| {
+                    s.state_machine.toggle_notification_app(&app_str);
+                    let _ = s.state_machine.settings().save_default();
+                })
+                .child(text(chip_label).font(FONT_CAPS_LABEL).color(chip_color)),
+        );
+    }
+
     let tile_bgs = [NOTIF_SLACK_BG, NOTIF_WHATSAPP_BG, NOTIF_GITHUB_BG];
-    let notif_count = notifications.len().clamp(1, 3);
+    let notifications = state.state_machine.active_notifications();
+    let notif_count = notifications.len().clamp(1, 99);
     let notif_rows: Vec<(String, String, String, String, Color)> = if notifications.len() >= 2 {
         notifications
             .iter()
@@ -909,7 +1024,7 @@ fn render_hub(
                 "G".to_string(),
                 "GitHub".to_string(),
                 "PR #42 approved".to_string(),
-                "cay-app: merged by reviewer".to_string(),
+                "cay-app: merged".to_string(),
                 NOTIF_GITHUB_BG,
             ),
         ]
@@ -920,8 +1035,8 @@ fn render_hub(
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(16.0)
-        .gap(10.0)
+        .padding(14.0)
+        .gap(8.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
         .child(
@@ -936,7 +1051,6 @@ fn render_hub(
                         .color(TEXT_MUTED),
                 )
                 .child(
-                    // Count badge
                     el().px(6.0).py(2.0).radius(8.0).fill(NOTIF_SLACK_BG).child(
                         text(format!("{notif_count}"))
                             .font(FONT_CAPS_LABEL)
@@ -957,24 +1071,23 @@ fn render_hub(
                         })
                         .child(text("Clear").font(FONT_META).color(TEXT_MUTED)),
                 ),
-        );
+        )
+        .child(notif_chips);
 
     for (i, (badge, app_name, sender, msg, tile_bg)) in notif_rows.into_iter().enumerate() {
-        let preview = if msg.chars().count() > 26 {
-            let prefix: String = msg.chars().take(26).collect();
-            format!("{prefix}…")
-        } else {
-            msg
-        };
+        let sender_disp = truncate_preview(&sender, 16);
+        let preview_disp = truncate_preview(&msg, 22);
         let ts = timestamps.get(i).copied().unwrap_or("?");
         let _ = app_name;
         notif_card = notif_card.child(
             row()
-                .gap(10.0)
+                .w_full()
+                .min_w(0.0)
+                .gap(8.0)
                 .center_y()
                 .child(
-                    el().size(34.0, 34.0)
-                        .radius(11.0)
+                    el().size(32.0, 32.0)
+                        .radius(10.0)
                         .fill(tile_bg)
                         .center()
                         .child(text(badge).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
@@ -984,8 +1097,12 @@ fn render_hub(
                         .grow(1.0)
                         .min_w(0.0)
                         .gap(2.0)
-                        .child(text(sender).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
-                        .child(text(preview).font(FONT_META).color(TEXT_MUTED)),
+                        .child(
+                            text(sender_disp)
+                                .font(FONT_BODY_SEMIBOLD)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(text(preview_disp).font(FONT_META).color(TEXT_MUTED)),
                 )
                 .child(text(ts).font(FONT_META_TABULAR).color(TEXT_MUTED)),
         );
@@ -995,8 +1112,8 @@ fn render_hub(
         .key("content-hub")
         .w_full()
         .h_full()
-        .padding(18.0)
-        .gap(12.0)
+        .padding(16.0)
+        .gap(10.0)
         .child(media_card)
         .child(today_card)
         .child(notif_card)
@@ -1020,17 +1137,7 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         IslandState::UpcomingEvent { event } => render_upcoming_event(event, accent),
         IslandState::Timer { timer } => render_timer(timer),
         IslandState::Hud { hud } => render_hud(hud),
-        IslandState::Hub {
-            media,
-            today_events,
-            notifications,
-        } => render_hub(
-            media.as_ref(),
-            today_events,
-            notifications,
-            &state.today_header,
-            accent,
-        ),
+        IslandState::Hub { .. } => render_hub(state, accent),
     };
 
     let pill = el()
@@ -1085,10 +1192,21 @@ fn build_tray_menu() -> Vec<TrayItem> {
         TrayItem::action("timer_pause_resume", "Focus Timer: Pause / Resume"),
         TrayItem::action("timer_stop", "Focus Timer: Stop"),
         TrayItem::Separator,
-        TrayItem::action("accent_sky", "Accent: Sky (#7CC4FF)"),
-        TrayItem::action("accent_lime", "Accent: Lime (#A3E635)"),
-        TrayItem::action("accent_warm", "Accent: Warm (#FFB86B)"),
-        TrayItem::action("accent_purple", "Accent: Purple (#F0ABFC)"),
+        TrayItem::action("notif_slack", "Notif App: Slack (Toggle)"),
+        TrayItem::action("notif_whatsapp", "Notif App: WhatsApp (Toggle)"),
+        TrayItem::action("notif_teams", "Notif App: Teams (Toggle)"),
+        TrayItem::action("notif_discord", "Notif App: Discord (Toggle)"),
+        TrayItem::action("notif_outlook", "Notif App: Outlook (Toggle)"),
+        TrayItem::Separator,
+        TrayItem::action("media_spotify", "Media Control: Spotify (Toggle)"),
+        TrayItem::action("media_chrome", "Media Control: Chrome (Toggle)"),
+        TrayItem::action("media_edge", "Media Control: Edge (Toggle)"),
+        TrayItem::action("media_vlc", "Media Control: VLC (Toggle)"),
+        TrayItem::Separator,
+        TrayItem::action("accent_sky", "Accent: Sky (#3DD8FF)"),
+        TrayItem::action("accent_lime", "Accent: Lime (#74FF38)"),
+        TrayItem::action("accent_warm", "Accent: Warm (#FF9A47)"),
+        TrayItem::action("accent_purple", "Accent: Purple (#BF72FF)"),
         TrayItem::Separator,
         TrayItem::action("monitor_primary", "Display: Primary Monitor"),
         TrayItem::action("monitor_pointer", "Display: Follow Pointer Monitor"),
@@ -1218,6 +1336,42 @@ fn main() {
                     }),
                     "timer_stop" => tray_pill.update(|s, _| {
                         s.state_machine.stop_timer();
+                    }),
+                    "notif_slack" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_notification_app("Slack");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "notif_whatsapp" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_notification_app("WhatsApp");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "notif_teams" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_notification_app("Teams");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "notif_discord" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_notification_app("Discord");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "notif_outlook" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_notification_app("Outlook");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "media_spotify" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_media_app("Spotify");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "media_chrome" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_media_app("Chrome");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "media_edge" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_media_app("Edge");
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "media_vlc" => tray_pill.update(|s, _| {
+                        s.state_machine.toggle_media_app("VLC");
+                        let _ = s.state_machine.settings().save_default();
                     }),
                     "accent_sky" => tray_pill.update(|s, _| {
                         s.state_machine.set_accent(AccentPreset::Sky);

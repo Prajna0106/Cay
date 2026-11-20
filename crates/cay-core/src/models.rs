@@ -124,6 +124,8 @@ pub struct IslandSettings {
     pub do_not_disturb: bool,
     #[serde(default)]
     pub blocked_notification_apps: Vec<String>,
+    #[serde(default)]
+    pub blocked_media_apps: Vec<String>,
 }
 
 impl Default for IslandSettings {
@@ -139,6 +141,7 @@ impl Default for IslandSettings {
             monitor_choice: MonitorChoice::Primary,
             do_not_disturb: false,
             blocked_notification_apps: Vec::new(),
+            blocked_media_apps: Vec::new(),
         }
     }
 }
@@ -214,6 +217,7 @@ mod tests {
             monitor_choice: MonitorChoice::UnderPointer,
             do_not_disturb: true,
             blocked_notification_apps: vec!["Discord".to_string()],
+            blocked_media_apps: vec!["Chrome".to_string()],
         };
 
         let json = serde_json::to_string(&settings).unwrap();
