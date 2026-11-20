@@ -22,29 +22,29 @@ use std::sync::{Arc, OnceLock};
 
 // Design Tokens from design/tokens.json (Linear sRGB for Rune's Color pipeline)
 const ISLAND_BG: Color = Color {
-    r: 0.0033,
-    g: 0.0033,
-    b: 0.0048,
+    r: 0.00182,
+    g: 0.00182,
+    b: 0.01033,
     a: 1.0,
-}; // #0B0B0F
+}; // #06061A
 const ISLAND_BORDER: Color = Color {
-    r: 0.0194,
-    g: 0.0194,
-    b: 0.0273,
-    a: 1.0,
-}; // #26262E
+    r: 0.0975,
+    g: 0.1273,
+    b: 0.8714,
+    a: 0.32,
+}; // #5864F0 @ 32%
 const CARD_SURFACE: Color = Color {
-    r: 0.0086,
-    g: 0.0086,
-    b: 0.0123,
+    r: 0.00401,
+    g: 0.00401,
+    b: 0.01621,
     a: 1.0,
-}; // #17171D
+}; // #0D0D22
 const TRACK_BG: Color = Color {
-    r: 0.0273,
-    g: 0.0273,
-    b: 0.0396,
+    r: 0.00769,
+    g: 0.00769,
+    b: 0.02611,
     a: 1.0,
-}; // #2E2E38
+}; // #15152A
 const TEXT_PRIMARY: Color = Color {
     r: 0.9131,
     g: 0.9131,
@@ -58,35 +58,35 @@ const TEXT_SECONDARY: Color = Color {
     a: 1.0,
 }; // #D4D4D8
 const TEXT_MUTED: Color = Color {
-    r: 0.3564,
-    g: 0.3564,
-    b: 0.4019,
+    r: 0.0768,
+    g: 0.0768,
+    b: 0.2070,
     a: 1.0,
-}; // #A1A1AA
+}; // #48487E
 const ACCENT_SKY: Color = Color {
-    r: 0.2016,
-    g: 0.5520,
+    r: 0.0476,
+    g: 0.6844,
     b: 1.0000,
     a: 1.0,
-}; // #7CC4FF
+}; // #3DD8FF
 const ACCENT_LIME: Color = Color {
-    r: 0.3663,
-    g: 0.7874,
-    b: 0.0369,
+    r: 0.1752,
+    g: 1.0000,
+    b: 0.0391,
     a: 1.0,
-}; // #A3E635
+}; // #74FF38
 const ACCENT_WARM: Color = Color {
     r: 1.0000,
-    g: 0.4793,
-    b: 0.1470,
+    g: 0.3208,
+    b: 0.0638,
     a: 1.0,
-}; // #FFB86B
+}; // #FF9A47
 const ACCENT_PURPLE: Color = Color {
-    r: 0.8714,
-    g: 0.4072,
-    b: 0.9686,
+    r: 0.5411,
+    g: 0.1680,
+    b: 1.0000,
     a: 1.0,
-}; // #F0ABFC
+}; // #BF72FF
 const ALBUM_TILE_BG: Color = Color {
     r: 0.0437,
     g: 0.0284,
@@ -100,35 +100,47 @@ const ALBUM_ICON_COLOR: Color = Color {
     a: 1.0,
 }; // #C9C1F5
 const NOTIF_SLACK_BG: Color = Color {
-    r: 0.0685,
-    g: 0.0075,
-    b: 0.0704,
+    r: 0.1465,
+    g: 0.01765,
+    b: 0.2791,
     a: 1.0,
-}; // #4A154B
+}; // #6B2490
 const NOTIF_WHATSAPP_BG: Color = Color {
-    r: 0.0137,
-    g: 0.0437,
-    b: 0.0252,
+    r: 0.01227,
+    g: 0.2619,
+    b: 0.1023,
     a: 1.0,
-}; // #1F3B2C
+}; // #1D8C5A
 const NOTIF_GITHUB_BG: Color = Color {
-    r: 0.0242,
-    g: 0.0284,
-    b: 0.0423,
+    r: 0.04672,
+    g: 0.08848,
+    b: 0.1385,
     a: 1.0,
-}; // #2B2F3A
+}; // #3D5468
 const CAL_NEUTRAL_BAR: Color = Color {
-    r: 0.1470,
-    g: 0.1470,
-    b: 0.1878,
+    r: 0.03688,
+    g: 0.03688,
+    b: 0.08042,
     a: 1.0,
-}; // #6B6B78
+}; // #363650
 const CAL_TILE_BG: Color = Color {
-    r: 0.0116,
-    g: 0.0232,
-    b: 0.0467,
+    r: 0.00401,
+    g: 0.01371,
+    b: 0.03688,
     a: 1.0,
-}; // #1C2A3D
+}; // #0D1F36
+const CAL_FEATURED_BORDER: Color = Color {
+    r: 0.0476,
+    g: 0.6844,
+    b: 1.0000,
+    a: 0.30,
+}; // #3DD8FF @ 30%
+const PILL_BG: Color = Color {
+    r: 0.0476,
+    g: 0.6844,
+    b: 1.0000,
+    a: 0.15,
+}; // #3DD8FF @ 15% for countdown pill bg
 
 // Typography Tokens from design/tokens.json
 const FONT_CARD_TITLE: TextStyle = TextStyle::new(15.0, 600.0);
@@ -193,6 +205,18 @@ static ICON_PLAY: Icon = Icon {
     name: "cay-play",
     view: 24.0,
     body: r#"<path d="M7 4v16l13-8L7 4Z" fill="currentColor"/>"#,
+};
+
+static ICON_CALENDAR: Icon = Icon {
+    name: "cay-calendar",
+    view: 24.0,
+    body: r#"<rect x="3" y="4" width="18" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M16 2v4M8 2v4M3 10h18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>"#,
+};
+
+static ICON_BELL: Icon = Icon {
+    name: "cay-bell",
+    view: 24.0,
+    body: r#"<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>"#,
 };
 
 fn resolve_accent_color(preset: AccentPreset) -> Color {
@@ -542,13 +566,10 @@ fn render_hub(
 ) -> El {
     let default_media = sample_media();
     let active_media = media.unwrap_or(&default_media);
-    let source_header = if active_media.source_app.is_empty() {
-        "NOW PLAYING".to_string()
+    let source_app = if active_media.source_app.is_empty() {
+        "MUSIC".to_string()
     } else {
-        format!(
-            "NOW PLAYING · {}",
-            active_media.source_app.to_ascii_uppercase()
-        )
+        active_media.source_app.to_ascii_uppercase()
     };
     let ratio = if active_media.duration_secs > 0.0 {
         (active_media.position_secs / active_media.duration_secs).clamp(0.0, 1.0) as f32
@@ -565,145 +586,195 @@ fn render_hub(
     };
     let is_currently_playing = active_media.is_playing;
 
-    // Card 1: Now Playing
-    let media_card = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .padding(16.0)
-        .gap(12.0)
-        .radius(22.0)
-        .fill(CARD_SURFACE)
-        .child(text(source_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED))
-        .child(
-            row()
-                .gap(12.0)
-                .center_y()
-                .child(render_album_tile(
-                    64.0,
-                    14.0,
-                    26.0,
-                    active_media.thumbnail_bytes.as_deref(),
-                ))
-                .child(
-                    col()
-                        .gap(4.0)
-                        .child(
-                            text(&active_media.title)
-                                .font(FONT_CARD_TITLE)
-                                .color(TEXT_PRIMARY),
-                        )
-                        .child(text(&active_media.artist).font(FONT_BODY).color(TEXT_MUTED)),
-                ),
-        )
-        .child(
-            col()
-                .gap(6.0)
-                .child(
-                    el().w_full()
-                        .h(4.0)
-                        .radius(2.0)
-                        .fill(TRACK_BG)
-                        .child(el().size(fill_px, 4.0).radius(2.0).fill(accent)),
-                )
-                .child(
-                    row()
-                        .w_full()
-                        .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
-                        .child(el().grow(1.0))
-                        .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
-                ),
-        )
-        .child(
-            row()
-                .w_full()
-                .center()
-                .gap(18.0)
-                .child(
-                    el().key("hub-btn-prev")
-                        .role("button")
-                        .label("Previous track")
-                        .size(44.0, 44.0)
-                        .center()
-                        .on_press(|_: &mut AppState| {
-                            #[cfg(windows)]
-                            std::thread::spawn(|| {
-                                let _ = WinSmtcMediaProvider::new().previous_track();
-                            });
-                        })
-                        .child(icon(&ICON_PREV, 20.0).color(TEXT_PRIMARY)),
-                )
-                .child(
-                    el().key("hub-btn-play-pause")
-                        .role("button")
-                        .label(if is_currently_playing {
-                            "Pause"
-                        } else {
-                            "Play"
-                        })
-                        .size(44.0, 44.0)
-                        .radius(22.0)
-                        .fill(TEXT_PRIMARY)
-                        .center()
-                        .on_press(move |s: &mut AppState| {
-                            if let Some(mut m) = s.state_machine.latest_media().cloned() {
-                                m.is_playing = !m.is_playing;
-                                s.state_machine.set_media(Some(m));
-                            }
-                            #[cfg(windows)]
-                            std::thread::spawn(move || {
-                                let smtc = WinSmtcMediaProvider::new();
-                                if is_currently_playing {
-                                    let _ = smtc.pause();
-                                } else {
-                                    let _ = smtc.play();
-                                }
-                            });
-                        })
-                        .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
-                )
-                .child(
-                    el().key("hub-btn-next")
-                        .role("button")
-                        .label("Next track")
-                        .size(44.0, 44.0)
-                        .center()
-                        .on_press(|_: &mut AppState| {
-                            #[cfg(windows)]
-                            std::thread::spawn(|| {
-                                let _ = WinSmtcMediaProvider::new().next_track();
-                            });
-                        })
-                        .child(icon(&ICON_NEXT, 20.0).color(TEXT_PRIMARY)),
-                ),
+    // Mini waveform for alongside artist name
+    let waveform_heights: [f32; 7] = [5.0, 9.0, 7.0, 11.0, 6.0, 10.0, 4.0];
+    let mut mini_wave = row().gap(2.0).center_y().h(12.0);
+    for (idx, &bar_h) in waveform_heights.iter().enumerate() {
+        let h = if active_media.is_playing { bar_h } else { 3.0 };
+        mini_wave = mini_wave.child(
+            el().key(format!("mwave-{idx}"))
+                .size(2.0, h)
+                .radius(1.5)
+                .fill(accent)
+                .motion(PILL_SPRING),
         );
+    }
 
-    // Card 2: Today's Calendar (up to 3 items with accent, warm, and grey 3px bars)
+    // Card 1: Now Playing
+    let media_card =
+        col()
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .padding(16.0)
+            .gap(10.0)
+            .radius(22.0)
+            .fill(CARD_SURFACE)
+            .child(
+                row()
+                    .gap(6.0)
+                    .center_y()
+                    .child(icon(&ICON_MUSIC, 11.0).color(TEXT_MUTED))
+                    .child(text(source_app).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+            )
+            .child(
+                row()
+                    .gap(12.0)
+                    .center_y()
+                    .child(render_album_tile(
+                        68.0,
+                        14.0,
+                        28.0,
+                        active_media.thumbnail_bytes.as_deref(),
+                    ))
+                    .child(
+                        col()
+                            .grow(1.0)
+                            .min_w(0.0)
+                            .gap(5.0)
+                            .child(
+                                text(&active_media.title)
+                                    .font(FONT_CARD_TITLE)
+                                    .color(TEXT_PRIMARY),
+                            )
+                            .child(row().gap(6.0).center_y().child(mini_wave).child(
+                                text(&active_media.artist).font(FONT_BODY).color(TEXT_MUTED),
+                            )),
+                    ),
+            )
+            .child(
+                col()
+                    .gap(5.0)
+                    .child(
+                        el().w_full()
+                            .h(5.0)
+                            .radius(3.0)
+                            .fill(TRACK_BG)
+                            .child(el().size(fill_px, 5.0).radius(3.0).fill(accent)),
+                    )
+                    .child(
+                        row()
+                            .w_full()
+                            .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
+                            .child(el().grow(1.0))
+                            .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
+                    ),
+            )
+            .child(el().grow(1.0))
+            .child(
+                row()
+                    .w_full()
+                    .center()
+                    .gap(18.0)
+                    .child(
+                        el().key("hub-btn-prev")
+                            .role("button")
+                            .label("Previous track")
+                            .size(44.0, 44.0)
+                            .center()
+                            .on_press(|_: &mut AppState| {
+                                #[cfg(windows)]
+                                std::thread::spawn(|| {
+                                    let _ = WinSmtcMediaProvider::new().previous_track();
+                                });
+                            })
+                            .child(icon(&ICON_PREV, 20.0).color(TEXT_SECONDARY)),
+                    )
+                    .child(
+                        el().key("hub-btn-play-pause")
+                            .role("button")
+                            .label(if is_currently_playing {
+                                "Pause"
+                            } else {
+                                "Play"
+                            })
+                            .size(44.0, 44.0)
+                            .radius(22.0)
+                            .fill(TEXT_PRIMARY)
+                            .center()
+                            .on_press(move |s: &mut AppState| {
+                                if let Some(mut m) = s.state_machine.latest_media().cloned() {
+                                    m.is_playing = !m.is_playing;
+                                    s.state_machine.set_media(Some(m));
+                                }
+                                #[cfg(windows)]
+                                std::thread::spawn(move || {
+                                    let smtc = WinSmtcMediaProvider::new();
+                                    if is_currently_playing {
+                                        let _ = smtc.pause();
+                                    } else {
+                                        let _ = smtc.play();
+                                    }
+                                });
+                            })
+                            .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
+                    )
+                    .child(
+                        el().key("hub-btn-next")
+                            .role("button")
+                            .label("Next track")
+                            .size(44.0, 44.0)
+                            .center()
+                            .on_press(|_: &mut AppState| {
+                                #[cfg(windows)]
+                                std::thread::spawn(|| {
+                                    let _ = WinSmtcMediaProvider::new().next_track();
+                                });
+                            })
+                            .child(icon(&ICON_NEXT, 20.0).color(TEXT_SECONDARY)),
+                    ),
+            );
+
+    // Card 2: Today's Calendar
+    // Featured event: first real or sample event with outlined sky-tinted block
     let bar_colors = [accent, ACCENT_WARM, CAL_NEUTRAL_BAR];
-    let event_rows: Vec<(String, String, Color)> = if today_events.len() >= 2 {
-        today_events
+    let (featured_title, featured_sub, featured_svc, secondary_rows) = if today_events.len() >= 2 {
+        let feat = &today_events[0];
+        let feat_sub = format!("{} min", feat.duration_minutes);
+        let secondary: Vec<(String, String, Color)> = today_events
             .iter()
-            .take(3)
+            .skip(1)
+            .take(2)
             .enumerate()
             .map(|(i, evt)| {
-                let sub = format!("{} min · {}", evt.duration_minutes, evt.service_name);
-                (evt.title.clone(), sub, bar_colors[i % bar_colors.len()])
+                let t = format!("{} min · {}", evt.duration_minutes, evt.service_name);
+                (evt.title.clone(), t, bar_colors[(i + 1) % bar_colors.len()])
             })
-            .collect()
+            .collect();
+        (
+            feat.title.clone(),
+            feat_sub,
+            feat.service_name.clone(),
+            secondary,
+        )
+    } else if let Some(evt) = today_events.first() {
+        (
+            evt.title.clone(),
+            format!("{} min", evt.duration_minutes),
+            evt.service_name.clone(),
+            vec![
+                ("Gym".to_string(), "8:30 – 9:30 PM".to_string(), ACCENT_WARM),
+                (
+                    "Call with Mom".to_string(),
+                    "10:00 PM".to_string(),
+                    CAL_NEUTRAL_BAR,
+                ),
+            ],
+        )
     } else {
-        let first_title = today_events
-            .first()
-            .map(|e| e.title.clone())
-            .unwrap_or_else(|| "Design review".to_string());
-        vec![
-            (first_title, "7:20 – 8:00 PM · Teams".to_string(), accent),
-            ("Gym".to_string(), "8:30 – 9:30 PM".to_string(), ACCENT_WARM),
-            (
-                "Call with Mom".to_string(),
-                "10:00 PM".to_string(),
-                CAL_NEUTRAL_BAR,
-            ),
-        ]
+        (
+            "Design review".to_string(),
+            "40 min".to_string(),
+            "Microsoft Teams".to_string(),
+            vec![
+                ("Gym".to_string(), "8:30 – 9:30 PM".to_string(), ACCENT_WARM),
+                (
+                    "Call with Mom".to_string(),
+                    "10:00 PM".to_string(),
+                    CAL_NEUTRAL_BAR,
+                ),
+            ],
+        )
     };
 
     let mut today_card = col()
@@ -714,18 +785,61 @@ fn render_hub(
         .gap(10.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
-        .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED));
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
+                .child(text(today_header).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+        )
+        // Featured event block with sky-tinted border
+        .child(
+            col()
+                .w_full()
+                .padding(10.0)
+                .gap(4.0)
+                .radius(12.0)
+                .fill(CAL_TILE_BG)
+                .border(1.0, CAL_FEATURED_BORDER)
+                .child(
+                    row()
+                        .w_full()
+                        .center_y()
+                        .child(
+                            text(featured_title)
+                                .font(FONT_PRIMARY_LINE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(el().grow(1.0))
+                        // Countdown pill "in X min"
+                        .child(
+                            el().px(8.0)
+                                .py(3.0)
+                                .radius(10.0)
+                                .fill(PILL_BG)
+                                .border(1.0, CAL_FEATURED_BORDER)
+                                .child(text("JOIN").font(FONT_CAPS_LABEL).color(accent)),
+                        ),
+                )
+                .child(
+                    text(format!("{} · {}", featured_sub, featured_svc))
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                ),
+        );
 
-    for (title, sub, bar_color) in event_rows {
+    for (title, sub, bar_color) in secondary_rows {
         today_card = today_card.child(
             row()
                 .gap(10.0)
                 .center_y()
-                .child(el().size(3.0, 34.0).radius(2.0).fill(bar_color))
+                .child(el().size(3.0, 32.0).radius(2.0).fill(bar_color))
                 .child(
                     col()
+                        .grow(1.0)
+                        .min_w(0.0)
                         .gap(2.0)
-                        .child(text(title).font(FONT_PRIMARY_LINE).color(TEXT_PRIMARY))
+                        .child(text(title).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
                         .child(text(sub).font(FONT_META).color(TEXT_MUTED)),
                 ),
         );
@@ -742,9 +856,10 @@ fn render_hub(
             .child(text("Open calendar").font(FONT_META).color(accent)),
     );
 
-    // Card 3: Recent Notifications (up to 3 items)
+    // Card 3: Recent Notifications
     let tile_bgs = [NOTIF_SLACK_BG, NOTIF_WHATSAPP_BG, NOTIF_GITHUB_BG];
-    let notif_rows: Vec<(String, String, String, Color)> = if notifications.len() >= 2 {
+    let notif_count = notifications.len().clamp(1, 3);
+    let notif_rows: Vec<(String, String, String, String, Color)> = if notifications.len() >= 2 {
         notifications
             .iter()
             .take(3)
@@ -759,6 +874,7 @@ fn render_hub(
                     .to_string();
                 (
                     badge,
+                    n.app_name.clone(),
                     n.sender.clone(),
                     n.message.clone(),
                     tile_bgs[i % tile_bgs.len()],
@@ -775,21 +891,30 @@ fn render_hub(
             .map(|n| n.message.clone())
             .unwrap_or_else(|| "Can you share the island PRD…".to_string());
         vec![
-            ("S".to_string(), first_sender, first_msg, NOTIF_SLACK_BG),
+            (
+                "S".to_string(),
+                "Slack".to_string(),
+                first_sender,
+                first_msg,
+                NOTIF_SLACK_BG,
+            ),
             (
                 "W".to_string(),
-                "WhatsApp · Family".to_string(),
+                "WhatsApp".to_string(),
+                "Family".to_string(),
                 "Dinner at 9?".to_string(),
                 NOTIF_WHATSAPP_BG,
             ),
             (
                 "G".to_string(),
                 "GitHub".to_string(),
-                "PR #42 was approved".to_string(),
+                "PR #42 approved".to_string(),
+                "cay-app: merged by reviewer".to_string(),
                 NOTIF_GITHUB_BG,
             ),
         ]
     };
+    let timestamps = ["2m", "14m", "1h"];
 
     let mut notif_card = col()
         .grow(1.0)
@@ -802,11 +927,21 @@ fn render_hub(
         .child(
             row()
                 .w_full()
+                .gap(6.0)
                 .center_y()
+                .child(icon(&ICON_BELL, 11.0).color(TEXT_MUTED))
                 .child(
                     text("NOTIFICATIONS")
                         .font(FONT_CAPS_LABEL)
                         .color(TEXT_MUTED),
+                )
+                .child(
+                    // Count badge
+                    el().px(6.0).py(2.0).radius(8.0).fill(NOTIF_SLACK_BG).child(
+                        text(format!("{notif_count}"))
+                            .font(FONT_CAPS_LABEL)
+                            .color(TEXT_PRIMARY),
+                    ),
                 )
                 .child(el().grow(1.0))
                 .child(
@@ -824,20 +959,22 @@ fn render_hub(
                 ),
         );
 
-    for (badge, sender, msg, tile_bg) in notif_rows {
-        let preview = if msg.chars().count() > 28 {
-            let prefix: String = msg.chars().take(28).collect();
+    for (i, (badge, app_name, sender, msg, tile_bg)) in notif_rows.into_iter().enumerate() {
+        let preview = if msg.chars().count() > 26 {
+            let prefix: String = msg.chars().take(26).collect();
             format!("{prefix}…")
         } else {
             msg
         };
+        let ts = timestamps.get(i).copied().unwrap_or("?");
+        let _ = app_name;
         notif_card = notif_card.child(
             row()
                 .gap(10.0)
                 .center_y()
                 .child(
-                    el().size(32.0, 32.0)
-                        .radius(10.0)
+                    el().size(34.0, 34.0)
+                        .radius(11.0)
                         .fill(tile_bg)
                         .center()
                         .child(text(badge).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
@@ -849,7 +986,8 @@ fn render_hub(
                         .gap(2.0)
                         .child(text(sender).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
                         .child(text(preview).font(FONT_META).color(TEXT_MUTED)),
-                ),
+                )
+                .child(text(ts).font(FONT_META_TABULAR).color(TEXT_MUTED)),
         );
     }
 
@@ -922,16 +1060,16 @@ fn build_tray_icon() -> TrayIcon {
     for y in 8..24 {
         for x in 3..29 {
             let idx = ((y * w + x) * 4) as usize;
-            // Solid dark pill (#0B0B0F) with sky accent dot (#7CC4FF)
+            // Solid dark pill (#06061A) with sky accent dot (#3DD8FF)
             if (13..19).contains(&y) && (20..26).contains(&x) {
-                rgba[idx] = 124;
-                rgba[idx + 1] = 196;
+                rgba[idx] = 61;
+                rgba[idx + 1] = 216;
                 rgba[idx + 2] = 255;
                 rgba[idx + 3] = 255;
             } else {
-                rgba[idx] = 11;
-                rgba[idx + 1] = 11;
-                rgba[idx + 2] = 15;
+                rgba[idx] = 6;
+                rgba[idx + 1] = 6;
+                rgba[idx + 2] = 26;
                 rgba[idx + 3] = 255;
             }
         }
