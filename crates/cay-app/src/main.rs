@@ -220,6 +220,30 @@ static ICON_BELL: Icon = Icon {
     body: r#"<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M13.73 21a2 2 0 0 1-3.46 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>"#,
 };
 
+static ICON_CLOSE: Icon = Icon {
+    name: "cay-close",
+    view: 24.0,
+    body: r#"<path d="M18 6 6 18M6 6l12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_HEADPHONES: Icon = Icon {
+    name: "cay-headphones",
+    view: 24.0,
+    body: r#"<path d="M3 14h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7a9 9 0 0 1 18 0v7a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_DND: Icon = Icon {
+    name: "cay-dnd",
+    view: 24.0,
+    body: r#"<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 12h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>"#,
+};
+
+static ICON_CHECK: Icon = Icon {
+    name: "cay-check",
+    view: 24.0,
+    body: r#"<path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
 fn resolve_accent_color(preset: AccentPreset) -> Color {
     match preset {
         AccentPreset::Sky => ACCENT_SKY,
@@ -679,8 +703,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(14.0)
-        .gap(8.0)
+        .padding(12.0)
+        .gap(6.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
         .child(
@@ -696,7 +720,14 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                         .child(text(source_app).font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
                 )
                 .child(el().grow(1.0))
-                .child(text("MEDIA CTRL").font(FONT_CAPS_LABEL).color(TEXT_MUTED)),
+                .child(
+                    el().px(5.0)
+                        .py(1.0)
+                        .radius(4.0)
+                        .fill(PILL_BG)
+                        .border(1.0, CAL_FEATURED_BORDER)
+                        .child(text("FLAC 24-bit").font(FONT_CHIP).color(accent)),
+                ),
         )
         .child(media_chips)
         .child(
@@ -706,16 +737,16 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .gap(10.0)
                 .center_y()
                 .child(render_album_tile(
-                    58.0,
+                    52.0,
                     12.0,
-                    24.0,
+                    22.0,
                     active_media.thumbnail_bytes.as_deref(),
                 ))
                 .child(
                     col()
                         .grow(1.0)
                         .min_w(0.0)
-                        .gap(4.0)
+                        .gap(3.0)
                         .child(
                             text(title_display)
                                 .font(FONT_CARD_TITLE)
@@ -732,13 +763,13 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         )
         .child(
             col()
-                .gap(4.0)
+                .gap(3.0)
                 .child(
                     el().w_full()
-                        .h(5.0)
-                        .radius(3.0)
+                        .h(4.0)
+                        .radius(2.0)
                         .fill(TRACK_BG)
-                        .child(el().size(fill_px, 5.0).radius(3.0).fill(accent)),
+                        .child(el().size(fill_px, 4.0).radius(2.0).fill(accent)),
                 )
                 .child(
                     row()
@@ -748,7 +779,6 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                         .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
                 ),
         )
-        .child(el().grow(1.0))
         .child(
             row()
                 .w_full()
@@ -758,7 +788,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                     el().key("hub-btn-prev")
                         .role("button")
                         .label("Previous track")
-                        .size(38.0, 38.0)
+                        .size(34.0, 34.0)
                         .center()
                         .on_press(|_: &mut AppState| {
                             #[cfg(windows)]
@@ -766,7 +796,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                                 let _ = WinSmtcMediaProvider::new().previous_track();
                             });
                         })
-                        .child(icon(&ICON_PREV, 18.0).color(TEXT_SECONDARY)),
+                        .child(icon(&ICON_PREV, 16.0).color(TEXT_SECONDARY)),
                 )
                 .child(
                     el().key("hub-btn-play-pause")
@@ -776,9 +806,9 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                         } else {
                             "Play"
                         })
-                        .size(42.0, 42.0)
-                        .radius(21.0)
-                        .fill(TEXT_PRIMARY)
+                        .size(38.0, 38.0)
+                        .radius(19.0)
+                        .fill(accent)
                         .center()
                         .on_press(move |s: &mut AppState| {
                             if let Some(mut m) = s.state_machine.latest_media().cloned() {
@@ -795,13 +825,13 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                                 }
                             });
                         })
-                        .child(icon(play_pause_icon, 18.0).color(ISLAND_BG)),
+                        .child(icon(play_pause_icon, 16.0).color(ISLAND_BG)),
                 )
                 .child(
                     el().key("hub-btn-next")
                         .role("button")
                         .label("Next track")
-                        .size(38.0, 38.0)
+                        .size(34.0, 34.0)
                         .center()
                         .on_press(|_: &mut AppState| {
                             #[cfg(windows)]
@@ -809,7 +839,33 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                                 let _ = WinSmtcMediaProvider::new().next_track();
                             });
                         })
-                        .child(icon(&ICON_NEXT, 18.0).color(TEXT_SECONDARY)),
+                        .child(icon(&ICON_NEXT, 16.0).color(TEXT_SECONDARY)),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .w_full()
+                .min_w(0.0)
+                .center_y()
+                .child(
+                    row()
+                        .gap(5.0)
+                        .center_y()
+                        .child(icon(&ICON_HEADPHONES, 11.0).color(accent))
+                        .child(
+                            text("Default Endpoint")
+                                .font(FONT_META)
+                                .color(TEXT_SECONDARY),
+                        ),
+                )
+                .child(el().grow(1.0))
+                .child(
+                    row()
+                        .gap(4.0)
+                        .center_y()
+                        .child(icon(&ICON_VOLUME, 11.0).color(TEXT_MUTED))
+                        .child(text("74%").font(FONT_META_TABULAR).color(TEXT_MUTED)),
                 ),
         );
 
@@ -872,19 +928,33 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(14.0)
-        .gap(8.0)
+        .padding(12.0)
+        .gap(6.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
         .child(
             row()
-                .gap(6.0)
+                .w_full()
+                .min_w(0.0)
                 .center_y()
-                .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
                 .child(
-                    text(truncate_preview(&state.today_header, 24))
-                        .font(FONT_CAPS_LABEL)
-                        .color(TEXT_MUTED),
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
+                        .child(
+                            text(truncate_preview(&state.today_header, 20))
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(el().grow(1.0))
+                .child(
+                    row()
+                        .gap(4.0)
+                        .center_y()
+                        .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
+                        .child(text(".ics Synced").font(FONT_CHIP).color(TEXT_MUTED)),
                 ),
         )
         .child(
@@ -901,6 +971,15 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                         .w_full()
                         .min_w(0.0)
                         .center_y()
+                        .child(text("Starts in 18 min").font(FONT_CHIP).color(accent))
+                        .child(el().grow(1.0))
+                        .child(text("11:00 AM").font(FONT_META).color(TEXT_MUTED)),
+                )
+                .child(
+                    row()
+                        .w_full()
+                        .min_w(0.0)
+                        .center_y()
                         .child(
                             col().grow(1.0).min_w(0.0).child(
                                 text(feat_title_disp)
@@ -912,9 +991,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                             el().px(7.0)
                                 .py(2.0)
                                 .radius(8.0)
-                                .fill(PILL_BG)
-                                .border(1.0, CAL_FEATURED_BORDER)
-                                .child(text("JOIN").font(FONT_CAPS_LABEL).color(accent)),
+                                .fill(accent)
+                                .child(text("JOIN →").font(FONT_CHIP).color(ISLAND_BG)),
                         ),
                 )
                 .child(text(feat_meta_disp).font(FONT_META).color(TEXT_MUTED)),
@@ -929,7 +1007,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .min_w(0.0)
                 .gap(8.0)
                 .center_y()
-                .child(el().size(3.0, 28.0).radius(1.5).fill(bar_color))
+                .child(el().size(3.0, 24.0).radius(1.5).fill(bar_color))
                 .child(
                     col()
                         .grow(1.0)
@@ -942,14 +1020,28 @@ fn render_hub(state: &AppState, accent: Color) -> El {
     }
 
     today_card = today_card.child(el().grow(1.0)).child(
-        el().key("hub-btn-open-cal")
-            .role("button")
-            .label("Open calendar")
-            .on_press(|_: &mut AppState| {
-                #[cfg(windows)]
-                let _ = open_external_url("https://calendar.google.com");
-            })
-            .child(text("Open calendar").font(FONT_META).color(accent)),
+        row()
+            .w_full()
+            .min_w(0.0)
+            .center_y()
+            .child(
+                row()
+                    .gap(4.0)
+                    .center_y()
+                    .child(icon(&ICON_CHECK, 11.0).color(ACCENT_LIME))
+                    .child(text("No conflicts").font(FONT_META).color(ACCENT_LIME)),
+            )
+            .child(el().grow(1.0))
+            .child(
+                el().key("hub-btn-open-cal")
+                    .role("button")
+                    .label("Open calendar")
+                    .on_press(|_: &mut AppState| {
+                        #[cfg(windows)]
+                        let _ = open_external_url("https://calendar.google.com");
+                    })
+                    .child(text("Open calendar →").font(FONT_META).color(accent)),
+            ),
     );
 
     // Card 3: Recent Notifications + App Notification Filters (arranged in 2 rows to prevent overflow)
@@ -1063,12 +1155,22 @@ fn render_hub(state: &AppState, accent: Color) -> El {
     };
     let timestamps = ["2m", "14m", "1h"];
 
+    let is_dnd = state.state_machine.is_do_not_disturb();
+    let dnd_color = if is_dnd { ACCENT_WARM } else { TEXT_MUTED };
+    let dnd_label = if is_dnd { "DND: On" } else { "DND: Off" };
+    let dnd_btn_bg = if is_dnd { PILL_BG } else { TRACK_BG };
+    let dnd_border = if is_dnd {
+        CAL_FEATURED_BORDER
+    } else {
+        ISLAND_BORDER
+    };
+
     let mut notif_card = col()
         .grow(1.0)
         .min_w(0.0)
         .h_full()
-        .padding(14.0)
-        .gap(8.0)
+        .padding(12.0)
+        .gap(6.0)
         .radius(22.0)
         .fill(CARD_SURFACE)
         .child(
@@ -1077,11 +1179,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .gap(6.0)
                 .center_y()
                 .child(icon(&ICON_BELL, 11.0).color(TEXT_MUTED))
-                .child(
-                    text("NOTIFICATIONS")
-                        .font(FONT_CAPS_LABEL)
-                        .color(TEXT_MUTED),
-                )
+                .child(text("UNREAD").font(FONT_CAPS_LABEL).color(TEXT_MUTED))
                 .child(
                     el().px(6.0).py(2.0).radius(8.0).fill(NOTIF_SLACK_BG).child(
                         text(format!("{notif_count}"))
@@ -1101,14 +1199,14 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                                 let _ = WinNotificationProvider::new().clear_all();
                             });
                         })
-                        .child(text("Clear").font(FONT_META).color(TEXT_MUTED)),
+                        .child(text("Clear All").font(FONT_META).color(TEXT_MUTED)),
                 ),
         )
         .child(notif_chips);
 
     for (i, (badge, app_name, sender, msg, tile_bg)) in notif_rows.into_iter().enumerate() {
         let sender_disp = truncate_preview(&sender, 16);
-        let preview_disp = truncate_preview(&msg, 22);
+        let preview_disp = truncate_preview(&msg, 20);
         let ts = timestamps.get(i).copied().unwrap_or("?");
         let _ = app_name;
         notif_card = notif_card.child(
@@ -1118,8 +1216,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .gap(8.0)
                 .center_y()
                 .child(
-                    el().size(32.0, 32.0)
-                        .radius(10.0)
+                    el().size(28.0, 28.0)
+                        .radius(9.0)
                         .fill(tile_bg)
                         .center()
                         .child(text(badge).font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
@@ -1128,7 +1226,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                     col()
                         .grow(1.0)
                         .min_w(0.0)
-                        .gap(2.0)
+                        .gap(1.0)
                         .child(
                             text(sender_disp)
                                 .font(FONT_BODY_SEMIBOLD)
@@ -1140,15 +1238,132 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         );
     }
 
-    row()
+    notif_card = notif_card.child(el().grow(1.0)).child(
+        row()
+            .w_full()
+            .min_w(0.0)
+            .center_y()
+            .child(
+                row()
+                    .gap(4.0)
+                    .center_y()
+                    .child(icon(&ICON_DND, 11.0).color(dnd_color))
+                    .child(text(dnd_label).font(FONT_META).color(dnd_color)),
+            )
+            .child(el().grow(1.0))
+            .child(
+                el().key("hub-btn-toggle-dnd")
+                    .role("button")
+                    .label("Toggle Do Not Disturb")
+                    .px(7.0)
+                    .py(2.0)
+                    .radius(7.0)
+                    .fill(dnd_btn_bg)
+                    .border(1.0, dnd_border)
+                    .on_press(|s: &mut AppState| {
+                        let next = !s.state_machine.is_do_not_disturb();
+                        s.state_machine.set_do_not_disturb(next);
+                        let _ = s.state_machine.settings().save_default();
+                    })
+                    .child(
+                        text(if is_dnd { "Active" } else { "Toggle" })
+                            .font(FONT_CHIP)
+                            .color(dnd_color),
+                    ),
+            ),
+    );
+
+    let top_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(16.0)
+        .px(2.0)
+        .center_y()
+        .child(
+            row()
+                .gap(3.0)
+                .center_y()
+                .child(el().size(3.0, 3.0).radius(1.5).fill(TEXT_MUTED))
+                .child(el().size(3.0, 3.0).radius(1.5).fill(TEXT_MUTED))
+                .child(el().size(3.0, 3.0).radius(1.5).fill(TEXT_MUTED))
+                .child(el().size(3.0, 3.0).radius(1.5).fill(TEXT_MUTED))
+                .child(
+                    text("  CAY · DYNAMIC HUD DECK")
+                        .font(FONT_CAPS_LABEL)
+                        .color(TEXT_MUTED),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(text("Esc to collapse").font(FONT_META).color(TEXT_MUTED))
+                .child(
+                    el().key("hub-btn-close")
+                        .role("button")
+                        .label("Close Hub")
+                        .size(18.0, 18.0)
+                        .radius(9.0)
+                        .fill(TRACK_BG)
+                        .center()
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.close_hub();
+                        })
+                        .child(icon(&ICON_CLOSE, 10.0).color(TEXT_MUTED)),
+                ),
+        );
+
+    let bottom_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(14.0)
+        .px(2.0)
+        .center_y()
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
+                .child(
+                    text("DirectX 12 Composited Overlay · GPU: 0.4%")
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(
+                    el().px(5.0)
+                        .py(1.0)
+                        .radius(4.0)
+                        .fill(TRACK_BG)
+                        .child(text("Win + Alt + I").font(FONT_CHIP).color(accent)),
+                )
+                .child(text("to toggle deck").font(FONT_META).color(TEXT_MUTED)),
+        );
+
+    col()
         .key("content-hub")
         .w_full()
         .h_full()
-        .padding(16.0)
-        .gap(10.0)
-        .child(media_card)
-        .child(today_card)
-        .child(notif_card)
+        .padding(12.0)
+        .gap(6.0)
+        .child(top_bar)
+        .child(
+            row()
+                .w_full()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(10.0)
+                .child(media_card)
+                .child(today_card)
+                .child(notif_card),
+        )
+        .child(bottom_bar)
 }
 
 fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
