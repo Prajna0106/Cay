@@ -2,7 +2,7 @@ use cay_core::models::{
     AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
     MonitorChoice, TimerState, ToastNotification,
 };
-use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine};
+use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine, SettingsTab};
 #[cfg(windows)]
 use cay_providers::{
     current_local_clock_and_date, get_system_master_volume_percent, init_mta,
@@ -39,6 +39,12 @@ const SOLID_CARD_SURFACE: Color = Color {
     b: 0.01621,
     a: 1.0,
 }; // #0D0D22
+const SOLID_CARD_BORDER: Color = Color {
+    r: 0.0975,
+    g: 0.1273,
+    b: 0.8714,
+    a: 0.20,
+};
 
 const ISLAND_BORDER: Color = SOLID_ISLAND_BORDER;
 
@@ -276,6 +282,48 @@ static ICON_CHECK: Icon = Icon {
     name: "cay-check",
     view: 24.0,
     body: r#"<path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_SETTINGS: Icon = Icon {
+    name: "cay-settings",
+    view: 24.0,
+    body: r#"<circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_PALETTE: Icon = Icon {
+    name: "cay-palette",
+    view: 24.0,
+    body: r#"<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12c0 3.6 2.4 6.6 5.8 7.6.5.1.7-.2.7-.5v-1.4c0-1.4 1.1-2.5 2.5-2.5h1.5c3.6 0 6.5-2.9 6.5-6.5C19 5.8 15.9 2 12 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_MONITOR: Icon = Icon {
+    name: "cay-monitor",
+    view: 24.0,
+    body: r#"<rect x="2" y="3" width="20" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M8 21h8M12 17v4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>"#,
+};
+
+static ICON_SHIELD: Icon = Icon {
+    name: "cay-shield",
+    view: 24.0,
+    body: r#"<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_KEYBOARD: Icon = Icon {
+    name: "cay-keyboard",
+    view: 24.0,
+    body: r#"<rect x="2" y="4" width="20" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M6 12h.01M10 12h.01M14 12h.01M18 12h.01M8 16h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>"#,
+};
+
+static ICON_CPU: Icon = Icon {
+    name: "cay-cpu",
+    view: 24.0,
+    body: r#"<rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="9" y="9" width="6" height="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M20 9h3M20 14h3M1 9h3M1 14h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>"#,
+};
+
+static ICON_SAVE: Icon = Icon {
+    name: "cay-save",
+    view: 24.0,
+    body: r#"<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" fill="none" stroke="currentColor" stroke-width="1.8"/><polyline points="7 3 7 8 15 8" fill="none" stroke="currentColor" stroke-width="1.8"/>"#,
 };
 
 fn resolve_accent_color(preset: AccentPreset) -> Color {
@@ -1347,6 +1395,19 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .center_y()
                 .child(text("Esc to collapse").font(FONT_META).color(TEXT_MUTED))
                 .child(
+                    el().key("hub-btn-settings")
+                        .role("button")
+                        .label("Open Preferences")
+                        .size(18.0, 18.0)
+                        .radius(9.0)
+                        .fill(TRACK_BG)
+                        .center()
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.open_settings();
+                        })
+                        .child(icon(&ICON_SETTINGS, 11.0).color(TEXT_MUTED)),
+                )
+                .child(
                     el().key("hub-btn-close")
                         .role("button")
                         .label("Close Hub")
@@ -1427,6 +1488,1113 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         .child(bottom_bar)
 }
 
+fn render_settings(state: &AppState, accent: Color) -> El {
+    let sm = &state.state_machine;
+    let settings = sm.settings();
+    let is_glass = sm.is_glass_effect_enabled();
+    let card_bg = if is_glass {
+        GLASS_CARD_SURFACE
+    } else {
+        SOLID_CARD_SURFACE
+    };
+    let card_border = if is_glass {
+        GLASS_CARD_BORDER
+    } else {
+        SOLID_CARD_BORDER
+    };
+
+    let top_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(20.0)
+        .px(4.0)
+        .center_y()
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(icon(&ICON_SETTINGS, 13.0).color(accent))
+                .child(
+                    text("PREFERENCES · WINDOWS 11 HUD CORE")
+                        .font(FONT_CAPS_LABEL)
+                        .color(TEXT_SECONDARY),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(text("Esc to dismiss").font(FONT_META).color(TEXT_MUTED))
+                .child(
+                    el().key("settings-btn-close")
+                        .role("button")
+                        .label("Close Preferences")
+                        .size(18.0, 18.0)
+                        .radius(9.0)
+                        .fill(TRACK_BG)
+                        .center()
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.close_settings();
+                        })
+                        .child(icon(&ICON_CLOSE, 10.0).color(TEXT_SECONDARY)),
+                ),
+        );
+
+    // Sidebar navigation tabs
+    let active_tab = sm.active_settings_tab();
+    let nav_items = [
+        (SettingsTab::Appearance, "Appearance", &ICON_PALETTE),
+        (SettingsTab::Displays, "Displays", &ICON_MONITOR),
+        (SettingsTab::Notifications, "Notifications", &ICON_SHIELD),
+        (SettingsTab::Calendar, "Calendar", &ICON_CALENDAR),
+        (SettingsTab::Hotkeys, "Hotkeys", &ICON_KEYBOARD),
+        (SettingsTab::Diagnostics, "Diagnostics", &ICON_CPU),
+    ];
+
+    let mut sidebar_col = col().w(190.0).h_full().gap(4.0);
+    for (tab, label, ic) in nav_items {
+        let is_selected = active_tab == tab;
+        let (tab_bg, tab_border, text_col, icon_col) = if is_selected {
+            (accent.alpha(0.18), accent.alpha(0.50), TEXT_PRIMARY, accent)
+        } else {
+            (
+                Color::TRANSPARENT,
+                Color::TRANSPARENT,
+                TEXT_SECONDARY,
+                TEXT_MUTED,
+            )
+        };
+
+        let mut tab_row = row()
+            .w_full()
+            .h_full()
+            .center_y()
+            .gap(10.0)
+            .child(icon(ic, 15.0).color(icon_col))
+            .child(text(label).font(FONT_BODY).color(text_col))
+            .child(el().grow(1.0));
+
+        if is_selected {
+            tab_row = tab_row.child(el().size(6.0, 6.0).radius(3.0).fill(accent));
+        }
+
+        sidebar_col = sidebar_col.child(
+            el().key(format!("tab-btn-{}", label.to_lowercase()))
+                .role("button")
+                .label(label)
+                .w_full()
+                .h(34.0)
+                .radius(8.0)
+                .fill(tab_bg)
+                .border(1.0, tab_border)
+                .px(10.0)
+                .on_press(move |s: &mut AppState| {
+                    s.state_machine.set_settings_tab(tab);
+                })
+                .child(tab_row),
+        );
+    }
+
+    // Telemetry badge at bottom of sidebar
+    let sidebar_footer = col()
+        .w_full()
+        .gap(3.0)
+        .padding(8.0)
+        .radius(8.0)
+        .fill(TRACK_BG)
+        .border(1.0, card_border)
+        .child(
+            row()
+                .center_y()
+                .gap(6.0)
+                .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
+                .child(
+                    text("DirectX 12 Compositor")
+                        .font(FONT_CHIP)
+                        .color(TEXT_SECONDARY),
+                ),
+        )
+        .child(
+            text("v1.2.0 · Flip Model Hooked")
+                .font(FONT_META)
+                .color(TEXT_MUTED),
+        );
+
+    let sidebar = sidebar_col.child(el().grow(1.0)).child(sidebar_footer);
+
+    // Active Tab Content
+    let tab_content: El = match active_tab {
+        SettingsTab::Appearance => {
+            let curr_preset = settings.accent;
+            let (pill_preview_fill, pill_preview_border) = if is_glass {
+                (GLASS_ISLAND_BG, GLASS_ISLAND_BORDER)
+            } else {
+                (SOLID_ISLAND_BG, SOLID_ISLAND_BORDER)
+            };
+
+            let preview_pill = row()
+                .size(240.0, 32.0)
+                .radius(16.0)
+                .fill(pill_preview_fill)
+                .border(1.0, pill_preview_border)
+                .center_y()
+                .px(14.0)
+                .gap(8.0)
+                .child(
+                    text(if state.clock_text.is_empty() {
+                        "12:45"
+                    } else {
+                        &state.clock_text
+                    })
+                    .font(FONT_CLOCK)
+                    .color(TEXT_PRIMARY),
+                )
+                .child(el().grow(1.0))
+                .child(el().size(6.0, 6.0).radius(3.0).fill(accent))
+                .child(icon(&ICON_BATTERY, 14.0).color(ACCENT_LIME));
+
+            let presets = [
+                (AccentPreset::Sky, "Sky", "#3DD8FF", ACCENT_SKY),
+                (AccentPreset::Lime, "Lime", "#74FF38", ACCENT_LIME),
+                (AccentPreset::Warm, "Warm", "#FF9A47", ACCENT_WARM),
+                (AccentPreset::Purple, "Purple", "#BF72FF", ACCENT_PURPLE),
+            ];
+
+            let mut preset_row = row().gap(8.0).center_y();
+            for (preset, label, hex, color_val) in presets {
+                let is_cur = curr_preset == preset;
+                let (btn_bg, btn_border) = if is_cur {
+                    (color_val.alpha(0.20), color_val)
+                } else {
+                    (TRACK_BG, GLASS_CARD_BORDER)
+                };
+                preset_row = preset_row.child(
+                    el().key(format!("btn-accent-{}", label.to_lowercase()))
+                        .role("button")
+                        .label(label)
+                        .px(10.0)
+                        .py(6.0)
+                        .radius(6.0)
+                        .fill(btn_bg)
+                        .border(1.0, btn_border)
+                        .on_press(move |s: &mut AppState| {
+                            s.state_machine.set_accent(preset);
+                            let _ = s.state_machine.settings().save_default();
+                        })
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .center_y()
+                                .child(el().size(8.0, 8.0).radius(4.0).fill(color_val))
+                                .child(
+                                    text(format!("{label} ({hex})"))
+                                        .font(FONT_CHIP)
+                                        .color(if is_cur { color_val } else { TEXT_SECONDARY }),
+                                ),
+                        ),
+                );
+            }
+
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Island Appearance & Radiance")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Translucent frosted acrylic shaders, specular rim lighting, and accent aura")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .padding(10.0)
+                        .radius(10.0)
+                        .fill(TRACK_BG)
+                        .border(1.0, card_border)
+                        .child(
+                            text("LIVE SHADER PREVIEW")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .center_y()
+                                .gap(14.0)
+                                .child(preview_pill)
+                                .child(
+                                    text(if is_glass {
+                                        "Translucent mica glass with specular rim"
+                                    } else {
+                                        "Solid obsidian black (high contrast)"
+                                    })
+                                    .font(FONT_META)
+                                    .color(TEXT_SECONDARY),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("RADIANCE ACCENT PRESETS")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(preset_row),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("MATERIAL SHADER SELECTION")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .gap(8.0)
+                                .child(
+                                    el().key("btn-shader-glass")
+                                        .role("button")
+                                        .label("Frosted Glass")
+                                        .px(12.0)
+                                        .py(7.0)
+                                        .radius(6.0)
+                                        .fill(if is_glass {
+                                            accent.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if is_glass {
+                                                accent
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            s.state_machine.set_glass_effect_enabled(true);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text("Frosted Acrylic Glass (Active)")
+                                                .font(FONT_CHIP)
+                                                .color(if is_glass { accent } else { TEXT_SECONDARY }),
+                                        ),
+                                )
+                                .child(
+                                    el().key("btn-shader-solid")
+                                        .role("button")
+                                        .label("Solid Obsidian")
+                                        .px(12.0)
+                                        .py(7.0)
+                                        .radius(6.0)
+                                        .fill(if !is_glass {
+                                            accent.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if !is_glass {
+                                                accent
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            s.state_machine.set_glass_effect_enabled(false);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text("Solid Obsidian Black")
+                                                .font(FONT_CHIP)
+                                                .color(if !is_glass { accent } else { TEXT_SECONDARY }),
+                                        ),
+                                ),
+                        ),
+                )
+        }
+        SettingsTab::Displays => {
+            let is_primary = settings.monitor_choice == MonitorChoice::Primary;
+            let top_offset = settings.top_offset_px;
+            let hover_enabled = settings.hover_expand_enabled;
+
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Multi-Display & Screen Placement")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Choose target monitor anchoring, vertical offset, and hover triggers")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("PROJECTION TARGET DISPLAY")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .gap(8.0)
+                                .child(
+                                    el().key("btn-monitor-primary")
+                                        .role("button")
+                                        .label("Primary Monitor")
+                                        .px(12.0)
+                                        .py(7.0)
+                                        .radius(6.0)
+                                        .fill(if is_primary {
+                                            accent.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if is_primary {
+                                                accent
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            s.state_machine.set_monitor_choice(MonitorChoice::Primary);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text("Primary Monitor (Fixed)")
+                                                .font(FONT_CHIP)
+                                                .color(if is_primary { accent } else { TEXT_SECONDARY }),
+                                        ),
+                                )
+                                .child(
+                                    el().key("btn-monitor-pointer")
+                                        .role("button")
+                                        .label("Follow Pointer")
+                                        .px(12.0)
+                                        .py(7.0)
+                                        .radius(6.0)
+                                        .fill(if !is_primary {
+                                            accent.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if !is_primary {
+                                                accent
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            s.state_machine.set_monitor_choice(MonitorChoice::UnderPointer);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text("Follow Pointer (Multi-Screen)")
+                                                .font(FONT_CHIP)
+                                                .color(if !is_primary { accent } else { TEXT_SECONDARY }),
+                                        ),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("SCREEN TOP MARGIN OFFSET")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .gap(10.0)
+                                .center_y()
+                                .child(
+                                    el().key("btn-offset-dec")
+                                        .role("button")
+                                        .label("Decrease offset")
+                                        .size(24.0, 24.0)
+                                        .radius(12.0)
+                                        .fill(TRACK_BG)
+                                        .border(1.0, GLASS_CARD_BORDER)
+                                        .center()
+                                        .on_press(|s: &mut AppState| {
+                                            let cur = s.state_machine.settings().top_offset_px;
+                                            s.state_machine.settings_mut().top_offset_px = (cur - 2.0).max(0.0);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(text("-").font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
+                                )
+                                .child(
+                                    text(format!("{top_offset:.0} px"))
+                                        .font(FONT_META_TABULAR)
+                                        .color(accent),
+                                )
+                                .child(
+                                    el().key("btn-offset-inc")
+                                        .role("button")
+                                        .label("Increase offset")
+                                        .size(24.0, 24.0)
+                                        .radius(12.0)
+                                        .fill(TRACK_BG)
+                                        .border(1.0, GLASS_CARD_BORDER)
+                                        .center()
+                                        .on_press(|s: &mut AppState| {
+                                            let cur = s.state_machine.settings().top_offset_px;
+                                            s.state_machine.settings_mut().top_offset_px = (cur + 2.0).min(50.0);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(text("+").font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY)),
+                                )
+                                .child(
+                                    text("Vertical clearance from physical bezel")
+                                        .font(FONT_META)
+                                        .color(TEXT_MUTED),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("HOVER EXPANSION")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .gap(10.0)
+                                .center_y()
+                                .child(
+                                    el().key("btn-toggle-hover")
+                                        .role("button")
+                                        .label("Toggle hover")
+                                        .px(12.0)
+                                        .py(6.0)
+                                        .radius(6.0)
+                                        .fill(if hover_enabled {
+                                            ACCENT_LIME.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if hover_enabled {
+                                                ACCENT_LIME
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            let next = !s.state_machine.settings().hover_expand_enabled;
+                                            s.state_machine.set_hover_expand_enabled(next);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text(if hover_enabled { "Enabled" } else { "Disabled" })
+                                                .font(FONT_CHIP)
+                                                .color(if hover_enabled { ACCENT_LIME } else { TEXT_MUTED }),
+                                        ),
+                                )
+                                .child(
+                                    text("Expand deck automatically when mouse rests over idle pill")
+                                        .font(FONT_META)
+                                        .color(TEXT_MUTED),
+                                ),
+                        ),
+                )
+        }
+        SettingsTab::Notifications => {
+            let is_dnd = sm.is_do_not_disturb();
+            let desktop_apps = ["Slack", "WhatsApp", "Teams", "Discord", "Outlook"];
+
+            let mut app_chips = row().gap(6.0).center_y();
+            for app_name in desktop_apps {
+                let is_enabled = sm.is_notification_app_enabled(app_name);
+                let (chip_bg, chip_border, chip_color) = if is_enabled {
+                    (
+                        ACCENT_LIME.alpha(0.18),
+                        ACCENT_LIME.alpha(0.60),
+                        ACCENT_LIME,
+                    )
+                } else {
+                    (TRACK_BG, GLASS_CARD_BORDER, TEXT_MUTED)
+                };
+
+                app_chips = app_chips.child(
+                    el().key(format!("btn-notif-app-{}", app_name.to_lowercase()))
+                        .role("button")
+                        .label(app_name)
+                        .px(10.0)
+                        .py(6.0)
+                        .radius(6.0)
+                        .fill(chip_bg)
+                        .border(1.0, chip_border)
+                        .on_press(move |s: &mut AppState| {
+                            s.state_machine.toggle_notification_app(app_name);
+                            let _ = s.state_machine.settings().save_default();
+                        })
+                        .child(
+                            row()
+                                .gap(5.0)
+                                .center_y()
+                                .child(
+                                    text(app_name)
+                                        .font(FONT_BODY_SEMIBOLD)
+                                        .color(if is_enabled { TEXT_PRIMARY } else { TEXT_MUTED }),
+                                )
+                                .child(
+                                    text(if is_enabled { "Allowed" } else { "Blocked" })
+                                        .font(FONT_CHIP)
+                                        .color(chip_color),
+                                ),
+                        ),
+                );
+            }
+
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Notification Routing & Do Not Disturb")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Filter system alerts and control peek popups without blocking deck history")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .padding(10.0)
+                        .radius(8.0)
+                        .fill(TRACK_BG)
+                        .border(1.0, card_border)
+                        .child(
+                            row()
+                                .center_y()
+                                .gap(10.0)
+                                .child(icon(&ICON_DND, 18.0).color(if is_dnd { ACCENT_WARM } else { TEXT_MUTED }))
+                                .child(
+                                    col()
+                                        .gap(2.0)
+                                        .child(
+                                            text("Master Do Not Disturb Mode")
+                                                .font(FONT_BODY_SEMIBOLD)
+                                                .color(TEXT_PRIMARY),
+                                        )
+                                        .child(
+                                            text("Suppresses glanceable popups; notifications still collect in the hub")
+                                                .font(FONT_META)
+                                                .color(TEXT_MUTED),
+                                        ),
+                                )
+                                .child(el().grow(1.0))
+                                .child(
+                                    el().key("btn-settings-dnd")
+                                        .role("button")
+                                        .label("Toggle DND")
+                                        .px(12.0)
+                                        .py(6.0)
+                                        .radius(6.0)
+                                        .fill(if is_dnd {
+                                            ACCENT_WARM.alpha(0.20)
+                                        } else {
+                                            TRACK_BG
+                                        })
+                                        .border(
+                                            1.0,
+                                            if is_dnd {
+                                                ACCENT_WARM
+                                            } else {
+                                                GLASS_CARD_BORDER
+                                            },
+                                        )
+                                        .on_press(|s: &mut AppState| {
+                                            let next = !s.state_machine.is_do_not_disturb();
+                                            s.state_machine.set_do_not_disturb(next);
+                                            let _ = s.state_machine.settings().save_default();
+                                        })
+                                        .child(
+                                            text(if is_dnd { "Active" } else { "Inactive" })
+                                                .font(FONT_CHIP)
+                                                .color(if is_dnd { ACCENT_WARM } else { TEXT_MUTED }),
+                                        ),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("DESKTOP APPLICATION ROUTING")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(app_chips),
+                )
+                .child(
+                    text("Blocked applications are silenced immediately and will not interrupt active full-screen windows.")
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                )
+        }
+        SettingsTab::Calendar => {
+            let ics_path = settings
+                .ics_source
+                .as_deref()
+                .unwrap_or("~/.cay/calendar.ics (Default)");
+            let next_meeting = sm.upcoming_events().first();
+
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Calendar & Meeting Synchronization")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Local iCalendar (.ics) integration for glanceable agenda peeks and 1-click Join")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .padding(10.0)
+                        .radius(8.0)
+                        .fill(TRACK_BG)
+                        .border(1.0, card_border)
+                        .child(
+                            row()
+                                .center_y()
+                                .gap(8.0)
+                                .child(icon(&ICON_CALENDAR, 16.0).color(accent))
+                                .child(
+                                    col()
+                                        .gap(2.0)
+                                        .child(
+                                            text("iCalendar Data Source")
+                                                .font(FONT_BODY_SEMIBOLD)
+                                                .color(TEXT_PRIMARY),
+                                        )
+                                        .child(
+                                            text(ics_path)
+                                                .font(FONT_META_TABULAR)
+                                                .color(TEXT_SECONDARY),
+                                        ),
+                                )
+                                .child(el().grow(1.0))
+                                .child(
+                                    el().key("btn-calendar-sync")
+                                        .role("button")
+                                        .label("Sync Calendar")
+                                        .px(10.0)
+                                        .py(5.0)
+                                        .radius(6.0)
+                                        .fill(accent.alpha(0.18))
+                                        .border(1.0, accent)
+                                        .on_press(|_: &mut AppState| {})
+                                        .child(text("Sync Now").font(FONT_CHIP).color(accent)),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(4.0)
+                        .child(
+                            text("NEXT SCHEDULED AGENDA ITEM")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            if let Some(event) = next_meeting {
+                                let meta_label = format!("{} min · {}", event.duration_minutes, event.service_name);
+                                row()
+                                    .gap(8.0)
+                                    .center_y()
+                                    .padding(8.0)
+                                    .radius(6.0)
+                                    .fill(TRACK_BG)
+                                    .child(
+                                        text(&event.title)
+                                            .font(FONT_BODY_SEMIBOLD)
+                                            .color(TEXT_PRIMARY),
+                                    )
+                                    .child(
+                                        text(&meta_label)
+                                            .font(FONT_META_TABULAR)
+                                            .color(accent),
+                                    )
+                            } else {
+                                row()
+                                    .padding(8.0)
+                                    .child(
+                                        text("No upcoming meetings scheduled for today.")
+                                            .font(FONT_META)
+                                            .color(TEXT_MUTED),
+                                    )
+                            },
+                        ),
+                )
+        }
+        SettingsTab::Hotkeys => {
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Global Shortcuts & System Integration")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Hardware keyboard triggers and Windows login auto-initialization")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("REGISTERED GLOBAL SHORTCUTS")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            col()
+                                .gap(6.0)
+                                .child(
+                                    row()
+                                        .padding(8.0)
+                                        .radius(6.0)
+                                        .fill(TRACK_BG)
+                                        .center_y()
+                                        .child(text("Toggle Expanded Hub").font(FONT_BODY).color(TEXT_PRIMARY))
+                                        .child(el().grow(1.0))
+                                        .child(
+                                            text("Ctrl + Alt + I")
+                                                .font(FONT_CHIP)
+                                                .color(accent),
+                                        ),
+                                )
+                                .child(
+                                    row()
+                                        .padding(8.0)
+                                        .radius(6.0)
+                                        .fill(TRACK_BG)
+                                        .center_y()
+                                        .child(text("Secondary Deck Trigger").font(FONT_BODY).color(TEXT_PRIMARY))
+                                        .child(el().grow(1.0))
+                                        .child(
+                                            text("Win + Shift + I")
+                                                .font(FONT_CHIP)
+                                                .color(TEXT_SECONDARY),
+                                        ),
+                                )
+                                .child(
+                                    row()
+                                        .padding(8.0)
+                                        .radius(6.0)
+                                        .fill(TRACK_BG)
+                                        .center_y()
+                                        .child(text("Dismiss Active Deck / Overlay").font(FONT_BODY).color(TEXT_PRIMARY))
+                                        .child(el().grow(1.0))
+                                        .child(
+                                            text("Esc")
+                                                .font(FONT_CHIP)
+                                                .color(TEXT_MUTED),
+                                        ),
+                                ),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("SYSTEM STARTUP")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .center_y()
+                                .child(
+                                    col()
+                                        .gap(2.0)
+                                        .child(
+                                            text("Start Cay automatically with Windows")
+                                                .font(FONT_BODY_SEMIBOLD)
+                                                .color(TEXT_PRIMARY),
+                                        )
+                                        .child(
+                                            text("Registers Cay in Windows CurrentVersion\\Run registry key")
+                                                .font(FONT_META)
+                                                .color(TEXT_MUTED),
+                                        ),
+                                )
+                                .child(el().grow(1.0))
+                                .child(
+                                    el().key("btn-toggle-autostart")
+                                        .role("button")
+                                        .label("Start with Windows")
+                                        .px(10.0)
+                                        .py(5.0)
+                                        .radius(6.0)
+                                        .fill(accent.alpha(0.18))
+                                        .border(1.0, accent)
+                                        .on_press(|_: &mut AppState| {
+                                            #[cfg(windows)]
+                                            let _ = set_windows_autostart(true);
+                                        })
+                                        .child(text("Enable").font(FONT_CHIP).color(accent)),
+                                ),
+                        ),
+                )
+        }
+        SettingsTab::Diagnostics => {
+            col()
+                .w_full()
+                .h_full()
+                .gap(12.0)
+                .child(
+                    col()
+                        .gap(2.0)
+                        .child(
+                            text("Engine Runtime & Telemetry")
+                                .font(FONT_CARD_TITLE)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(
+                            text("Hardware acceleration, swapchain compositor metrics, and process overhead")
+                                .font(FONT_META)
+                                .color(TEXT_MUTED),
+                        ),
+                )
+                .child(
+                    row()
+                        .gap(8.0)
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .gap(2.0)
+                                .child(text("GRAPHICS PIPELINE").font(FONT_CAPS_LABEL).color(TEXT_MUTED))
+                                .child(text("DirectX 12").font(FONT_BODY_SEMIBOLD).color(accent))
+                                .child(text("DirectComposition").font(FONT_META).color(TEXT_SECONDARY)),
+                        )
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .gap(2.0)
+                                .child(text("COMPOSITOR MODEL").font(FONT_CAPS_LABEL).color(TEXT_MUTED))
+                                .child(text("DWM Flip Model").font(FONT_BODY_SEMIBOLD).color(ACCENT_LIME))
+                                .child(text("Zero VSync Jitter").font(FONT_META).color(TEXT_SECONDARY)),
+                        )
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .gap(2.0)
+                                .child(text("WORKING SET RAM").font(FONT_CAPS_LABEL).color(TEXT_MUTED))
+                                .child(text("~24 MB").font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
+                                .child(text("Low OS Overhead").font(FONT_META).color(TEXT_SECONDARY)),
+                        )
+                        .child(
+                            col()
+                                .grow(1.0)
+                                .padding(8.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .gap(2.0)
+                                .child(text("INPUT MASK").font(FONT_CAPS_LABEL).color(TEXT_MUTED))
+                                .child(text("HTTRANSPARENT").font(FONT_BODY_SEMIBOLD).color(TEXT_PRIMARY))
+                                .child(text("Dynamic Pass-Through").font(FONT_META).color(TEXT_SECONDARY)),
+                        ),
+                )
+                .child(
+                    col()
+                        .gap(6.0)
+                        .child(
+                            text("WINRT SUBSYSTEM STATUS")
+                                .font(FONT_CAPS_LABEL)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .child(
+                                    el().padding(6.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .child(text("SMTC: Active").font(FONT_CHIP).color(ACCENT_LIME)),
+                                )
+                                .child(
+                                    el().padding(6.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .child(text("Notifications: Connected").font(FONT_CHIP).color(ACCENT_LIME)),
+                                )
+                                .child(
+                                    el().padding(6.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .child(text("Battery: Polled").font(FONT_CHIP).color(ACCENT_LIME)),
+                                )
+                                .child(
+                                    el().padding(6.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .child(text("DWM Hook: Synchronized").font(FONT_CHIP).color(ACCENT_LIME)),
+                                ),
+                        ),
+                )
+        }
+    };
+
+    let content_card = col()
+        .w_full()
+        .h_full()
+        .grow(1.0)
+        .min_w(0.0)
+        .padding(14.0)
+        .radius(12.0)
+        .fill(card_bg)
+        .border(1.0, card_border)
+        .child(tab_content);
+
+    let action_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(30.0)
+        .center_y()
+        .gap(10.0)
+        .child(
+            el().key("btn-restore-defaults")
+                .role("button")
+                .label("Restore Defaults")
+                .px(10.0)
+                .py(5.0)
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, GLASS_CARD_BORDER)
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.set_settings(IslandSettings::default());
+                    let _ = s.state_machine.settings().save_default();
+                })
+                .child(text("Restore Defaults").font(FONT_CHIP).color(TEXT_MUTED)),
+        )
+        .child(el().grow(1.0))
+        .child(
+            el().key("btn-save-settings")
+                .role("button")
+                .label("Save Preferences")
+                .px(14.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(accent)
+                .on_press(|s: &mut AppState| {
+                    let _ = s.state_machine.settings().save_default();
+                    s.state_machine.close_settings();
+                })
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(&ICON_SAVE, 12.0).color(TEXT_BUTTON_INVERTED))
+                        .child(
+                            text("Save & Done")
+                                .font(FONT_CHIP)
+                                .color(TEXT_BUTTON_INVERTED),
+                        ),
+                ),
+        )
+        .child(
+            el().key("btn-close-settings")
+                .role("button")
+                .label("Close")
+                .px(12.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, GLASS_CARD_BORDER)
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.close_settings();
+                })
+                .child(text("Close").font(FONT_CHIP).color(TEXT_SECONDARY)),
+        );
+
+    col()
+        .key("content-settings")
+        .w_full()
+        .h_full()
+        .padding(14.0)
+        .gap(8.0)
+        .child(top_bar)
+        .child(
+            row()
+                .w_full()
+                .grow(1.0)
+                .min_w(0.0)
+                .gap(12.0)
+                .child(sidebar)
+                .child(content_card),
+        )
+        .child(action_bar)
+}
+
 fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
     let current = state.state_machine.current_state();
     let IslandDimensions {
@@ -1446,6 +2614,7 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         IslandState::Timer { timer } => render_timer(timer),
         IslandState::Hud { hud } => render_hud(hud),
         IslandState::Hub { .. } => render_hub(state, accent),
+        IslandState::Settings => render_settings(state, accent),
     };
 
     let is_glass = state.state_machine.is_glass_effect_enabled();
@@ -1469,7 +2638,9 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
             s.state_machine.set_hovered(inside);
         })
         .on_press(|s: &mut AppState| {
-            s.state_machine.toggle_hub();
+            if !s.state_machine.is_settings_open() {
+                s.state_machine.toggle_hub();
+            }
         })
         .child(inner);
 
@@ -1501,6 +2672,7 @@ fn build_tray_icon() -> TrayIcon {
 
 fn build_tray_menu() -> Vec<TrayItem> {
     vec![
+        TrayItem::action("open_settings", "Settings & Preferences..."),
         TrayItem::action("toggle_hub", "Toggle Expanded Hub"),
         TrayItem::Separator,
         TrayItem::action("timer_start_25", "Focus Timer: Start 25 min"),
@@ -1537,9 +2709,15 @@ fn build_tray_menu() -> Vec<TrayItem> {
 }
 
 fn handle_key(s: &mut AppState, event: &KeyEvent, _: &mut Tx) -> bool {
-    if event.key == Key::Escape && s.state_machine.is_hub_open() {
-        s.state_machine.close_hub();
-        return true;
+    if event.key == Key::Escape {
+        if s.state_machine.is_settings_open() {
+            s.state_machine.close_settings();
+            return true;
+        }
+        if s.state_machine.is_hub_open() {
+            s.state_machine.close_hub();
+            return true;
+        }
     }
     false
 }
@@ -1579,8 +2757,11 @@ fn spec() -> AppSpec<AppState> {
                 s.state_machine.push_notification(sample_notification());
                 s.state_machine.toggle_hub();
             }),
+            ("settings", |s| {
+                s.state_machine.open_settings();
+            }),
         ],
-        ..AppSpec::new("Cay", (860.0, 360.0), AppState::default, island_view)
+        ..AppSpec::new("Cay", (880.0, 500.0), AppState::default, island_view)
     }
 }
 
@@ -1602,7 +2783,7 @@ fn main() {
         let pill = app.overlay(
             OverlaySpec {
                 name: "Cay Island",
-                size: (860.0, 360.0),
+                size: (880.0, 500.0),
                 edge: ScreenEdge::Top,
                 margin: top_margin,
                 align: Align::Center,
@@ -1643,6 +2824,7 @@ fn main() {
                     tray_pill.update(|s, _| s.state_machine.toggle_hub());
                 }
                 TrayEvent::Menu(id) => match id.as_str() {
+                    "open_settings" => tray_pill.update(|s, _| s.state_machine.open_settings()),
                     "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
                     "timer_start_25" => tray_pill.update(|s, _| {
                         s.state_machine.start_focus_timer(25 * 60, "Focus");

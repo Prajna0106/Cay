@@ -39,6 +39,8 @@ pub enum IslandState {
         today_events: Vec<CalendarMeeting>,
         notifications: Vec<ToastNotification>,
     },
+    /// Dedicated preferences and configuration suite.
+    Settings,
 }
 
 impl IslandState {
@@ -80,6 +82,11 @@ impl IslandState {
                 height: 330.0,
                 radius: 40.0,
             },
+            IslandState::Settings => IslandDimensions {
+                width: 840.0,
+                height: 460.0,
+                radius: 24.0,
+            },
         }
     }
 
@@ -94,6 +101,7 @@ impl IslandState {
             IslandState::Idle { .. } => 1,
             // Hub is user-toggled; priority ranking applies to automatic pill states.
             IslandState::Hub { .. } => 10,
+            IslandState::Settings => 11,
         }
     }
 }
@@ -144,6 +152,17 @@ pub fn resolve_highest_priority(
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SettingsTab {
+    #[default]
+    Appearance,
+    Displays,
+    Notifications,
+    Calendar,
+    Hotkeys,
+    Diagnostics,
+}
+
 /// Manages active state, history, and hub expansion.
 #[derive(Clone, Debug, PartialEq)]
 pub struct IslandStateMachine {
@@ -164,6 +183,8 @@ pub struct IslandStateMachine {
     hud_remaining_secs: f32,
     battery_status: BatteryStatus,
     hover_suppressed: bool,
+    is_settings_open: bool,
+    active_settings_tab: SettingsTab,
 }
 
 impl Default for IslandStateMachine {
@@ -188,6 +209,8 @@ impl Default for IslandStateMachine {
             hud_remaining_secs: 0.0,
             battery_status: BatteryStatus::default(),
             hover_suppressed: false,
+            is_settings_open: false,
+            active_settings_tab: SettingsTab::Appearance,
         }
     }
 }
@@ -199,7 +222,9 @@ impl IslandStateMachine {
 
     /// Current visual state to display.
     pub fn current_state(&self) -> IslandState {
-        if self.is_hub_open() {
+        if self.is_settings_open {
+            IslandState::Settings
+        } else if self.is_hub_open() {
             IslandState::Hub {
                 media: self.latest_media.clone(),
                 today_events: self.upcoming_events.clone(),
@@ -224,6 +249,37 @@ impl IslandStateMachine {
 
     pub fn set_hover_expand_enabled(&mut self, enabled: bool) {
         self.settings.hover_expand_enabled = enabled;
+    }
+
+    pub fn is_settings_open(&self) -> bool {
+        self.is_settings_open
+    }
+
+    pub fn open_settings(&mut self) {
+        self.is_settings_open = true;
+        self.is_hub_expanded = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn close_settings(&mut self) {
+        self.is_settings_open = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn toggle_settings(&mut self) {
+        if self.is_settings_open {
+            self.close_settings();
+        } else {
+            self.open_settings();
+        }
+    }
+
+    pub fn active_settings_tab(&self) -> SettingsTab {
+        self.active_settings_tab
+    }
+
+    pub fn set_settings_tab(&mut self, tab: SettingsTab) {
+        self.active_settings_tab = tab;
     }
 
     pub fn settings(&self) -> &IslandSettings {
@@ -739,6 +795,27 @@ mod tests {
 
         sm.set_glass_effect_enabled(true);
         assert!(sm.is_glass_effect_enabled());
+    }
+
+    #[test]
+    fn test_settings_state_and_tab_navigation() {
+        let mut sm = IslandStateMachine::new();
+        assert!(!sm.is_settings_open());
+        assert_eq!(sm.active_settings_tab(), SettingsTab::Appearance);
+
+        sm.open_settings();
+        assert!(sm.is_settings_open());
+        assert!(matches!(sm.current_state(), IslandState::Settings));
+        assert_eq!(sm.current_state().dimensions().width, 840.0);
+        assert_eq!(sm.current_state().dimensions().height, 460.0);
+        assert_eq!(sm.current_state().dimensions().radius, 24.0);
+
+        sm.set_settings_tab(SettingsTab::Hotkeys);
+        assert_eq!(sm.active_settings_tab(), SettingsTab::Hotkeys);
+
+        sm.close_settings();
+        assert!(!sm.is_settings_open());
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
     }
 
     #[test]

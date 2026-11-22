@@ -8,6 +8,6 @@ pub use models::{
     MonitorChoice, TimerState, ToastNotification,
 };
 pub use state::{
-    resolve_highest_priority, IslandDimensions, IslandState, IslandStateMachine,
+    resolve_highest_priority, IslandDimensions, IslandState, IslandStateMachine, SettingsTab,
     HUD_DISPLAY_DURATION_SECS, NOTIFICATION_PEEK_DURATION_SECS,
 };

@@ -73,6 +73,8 @@ flowchart LR
 - [x] **Do Not Disturb (DND) & Windows Focus Assist Sync**: Manual `do_not_disturb` setting plus automatic Windows Shell Quiet Hours / Focus Assist detection (`SHQueryUserNotificationState`) suppressing 5.0-second notification peeks while silently queuing unread notifications in the Expanded Hub.
 - [x] **Keyboard Accessibility & Global Hotkey**: Global `Win + Alt + I` shortcut (`RegisterHotKey`) to toggle the Expanded Hub from anywhere on Windows, plus `Esc` key handler to collapse the Hub.
 - [x] **Multi-Item Expanded Hub Cards**: Up to 3 upcoming events (with accent, warm, and neutral 3 px color bars and clickable "Open calendar" link) and up to 3 recent notifications (with app initial badges).
+- [x] **Frosted Glass Acrylic (Mica Translucency)**: Translucent mica background (`rgba` alpha 0.78), specular rim lighting (alpha 0.20), interior acrylic card surfaces (alpha 0.60), and toggleable settings option.
+- [x] **Dedicated Settings & Preferences App (Stitch UI Screen 2)**: Full $840 \times 460\text{ px}$ preferences suite (`IslandState::Settings`) with 6-category sidebar (Appearance, Displays, Notifications, Calendar, Hotkeys, Diagnostics), live 1:1 notch preview, accent aura selectors, top margin stepper, DND & app blacklist switches, hotkey indicators, DirectX 12 telemetry, and Tray/Hub integration.
 
 ---
 
