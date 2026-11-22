@@ -108,6 +108,10 @@ pub enum MonitorChoice {
     UnderPointer,
 }
 
+fn default_true() -> bool {
+    true
+}
+
 /// User preferences for Cay island behavior and appearance.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct IslandSettings {
@@ -126,6 +130,8 @@ pub struct IslandSettings {
     pub blocked_notification_apps: Vec<String>,
     #[serde(default)]
     pub blocked_media_apps: Vec<String>,
+    #[serde(default = "default_true")]
+    pub glass_effect_enabled: bool,
 }
 
 impl Default for IslandSettings {
@@ -142,6 +148,7 @@ impl Default for IslandSettings {
             do_not_disturb: false,
             blocked_notification_apps: Vec::new(),
             blocked_media_apps: Vec::new(),
+            glass_effect_enabled: true,
         }
     }
 }
@@ -218,6 +225,7 @@ mod tests {
             do_not_disturb: true,
             blocked_notification_apps: vec!["Discord".to_string()],
             blocked_media_apps: vec!["Chrome".to_string()],
+            glass_effect_enabled: true,
         };
 
         let json = serde_json::to_string(&settings).unwrap();

@@ -21,24 +21,58 @@ use rune::{
 use std::sync::{Arc, OnceLock};
 
 // Design Tokens from design/tokens.json (Linear sRGB for Rune's Color pipeline)
-const ISLAND_BG: Color = Color {
+const SOLID_ISLAND_BG: Color = Color {
     r: 0.00182,
     g: 0.00182,
     b: 0.01033,
     a: 1.0,
 }; // #06061A
-const ISLAND_BORDER: Color = Color {
+const SOLID_ISLAND_BORDER: Color = Color {
     r: 0.0975,
     g: 0.1273,
     b: 0.8714,
     a: 0.32,
 }; // #5864F0 @ 32%
-const CARD_SURFACE: Color = Color {
+const SOLID_CARD_SURFACE: Color = Color {
     r: 0.00401,
     g: 0.00401,
     b: 0.01621,
     a: 1.0,
 }; // #0D0D22
+
+const ISLAND_BORDER: Color = SOLID_ISLAND_BORDER;
+
+// Frosted Mica Acrylic Glass tokens
+const GLASS_ISLAND_BG: Color = Color {
+    r: 0.00182,
+    g: 0.00182,
+    b: 0.01033,
+    a: 0.78, // 78% translucency for desktop pass-through
+};
+const GLASS_ISLAND_BORDER: Color = Color {
+    r: 0.705,
+    g: 0.784,
+    b: 1.000,
+    a: 0.20, // Polished specular glass highlight rim
+};
+const GLASS_CARD_SURFACE: Color = Color {
+    r: 0.00401,
+    g: 0.00401,
+    b: 0.01621,
+    a: 0.60, // Interior acrylic card surface
+};
+const GLASS_CARD_BORDER: Color = Color {
+    r: 0.345,
+    g: 0.392,
+    b: 0.941,
+    a: 0.15, // Subtle inner card glass seam
+};
+const TEXT_BUTTON_INVERTED: Color = Color {
+    r: 0.00182,
+    g: 0.00182,
+    b: 0.01033,
+    a: 1.0,
+}; // Sharp opaque text for solid accent buttons
 const TRACK_BG: Color = Color {
     r: 0.00769,
     g: 0.00769,
@@ -547,7 +581,11 @@ fn render_upcoming_event(event: &CalendarMeeting, accent: Color) -> El {
                         let _ = open_external_url(url);
                     }
                 })
-                .child(text("Join").font(FONT_BODY_SEMIBOLD).color(ISLAND_BG)),
+                .child(
+                    text("Join")
+                        .font(FONT_BODY_SEMIBOLD)
+                        .color(TEXT_BUTTON_INVERTED),
+                ),
         )
 }
 
@@ -698,6 +736,13 @@ fn render_hub(state: &AppState, accent: Color) -> El {
     let title_display = truncate_preview(&active_media.title, 18);
     let artist_display = truncate_preview(&active_media.artist, 14);
 
+    let is_glass = state.state_machine.is_glass_effect_enabled();
+    let (card_fill, card_border, card_border_width) = if is_glass {
+        (GLASS_CARD_SURFACE, GLASS_CARD_BORDER, 1.0)
+    } else {
+        (SOLID_CARD_SURFACE, Color::TRANSPARENT, 0.0)
+    };
+
     // Card 1: Now Playing
     let media_card = col()
         .grow(1.0)
@@ -706,7 +751,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         .padding(12.0)
         .gap(6.0)
         .radius(22.0)
-        .fill(CARD_SURFACE)
+        .fill(card_fill)
+        .border(card_border_width, card_border)
         .child(
             row()
                 .w_full()
@@ -825,7 +871,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                                 }
                             });
                         })
-                        .child(icon(play_pause_icon, 16.0).color(ISLAND_BG)),
+                        .child(icon(play_pause_icon, 16.0).color(TEXT_BUTTON_INVERTED)),
                 )
                 .child(
                     el().key("hub-btn-next")
@@ -924,79 +970,79 @@ fn render_hub(state: &AppState, accent: Color) -> El {
     let feat_title_disp = truncate_preview(&featured_title, 15);
     let feat_meta_disp = truncate_preview(&format!("{} · {}", featured_sub, featured_svc), 20);
 
-    let mut today_card = col()
-        .grow(1.0)
-        .min_w(0.0)
-        .h_full()
-        .padding(12.0)
-        .gap(6.0)
-        .radius(22.0)
-        .fill(CARD_SURFACE)
-        .child(
-            row()
-                .w_full()
-                .min_w(0.0)
-                .center_y()
-                .child(
-                    row()
-                        .gap(6.0)
-                        .center_y()
-                        .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
-                        .child(
-                            text(truncate_preview(&state.today_header, 20))
-                                .font(FONT_CAPS_LABEL)
-                                .color(TEXT_MUTED),
-                        ),
-                )
-                .child(el().grow(1.0))
-                .child(
-                    row()
-                        .gap(4.0)
-                        .center_y()
-                        .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
-                        .child(text(".ics Synced").font(FONT_CHIP).color(TEXT_MUTED)),
-                ),
-        )
-        .child(
-            col()
-                .w_full()
-                .min_w(0.0)
-                .padding(8.0)
-                .gap(3.0)
-                .radius(12.0)
-                .fill(CAL_TILE_BG)
-                .border(1.0, CAL_FEATURED_BORDER)
-                .child(
-                    row()
-                        .w_full()
-                        .min_w(0.0)
-                        .center_y()
-                        .child(text("Starts in 18 min").font(FONT_CHIP).color(accent))
-                        .child(el().grow(1.0))
-                        .child(text("11:00 AM").font(FONT_META).color(TEXT_MUTED)),
-                )
-                .child(
-                    row()
-                        .w_full()
-                        .min_w(0.0)
-                        .center_y()
-                        .child(
-                            col().grow(1.0).min_w(0.0).child(
-                                text(feat_title_disp)
-                                    .font(FONT_PRIMARY_LINE)
-                                    .color(TEXT_PRIMARY),
+    let mut today_card =
+        col()
+            .grow(1.0)
+            .min_w(0.0)
+            .h_full()
+            .padding(12.0)
+            .gap(6.0)
+            .radius(22.0)
+            .fill(card_fill)
+            .border(card_border_width, card_border)
+            .child(
+                row()
+                    .w_full()
+                    .min_w(0.0)
+                    .center_y()
+                    .child(
+                        row()
+                            .gap(6.0)
+                            .center_y()
+                            .child(icon(&ICON_CALENDAR, 11.0).color(TEXT_MUTED))
+                            .child(
+                                text(truncate_preview(&state.today_header, 20))
+                                    .font(FONT_CAPS_LABEL)
+                                    .color(TEXT_MUTED),
                             ),
-                        )
-                        .child(
-                            el().px(7.0)
-                                .py(2.0)
-                                .radius(8.0)
-                                .fill(accent)
-                                .child(text("JOIN →").font(FONT_CHIP).color(ISLAND_BG)),
-                        ),
-                )
-                .child(text(feat_meta_disp).font(FONT_META).color(TEXT_MUTED)),
-        );
+                    )
+                    .child(el().grow(1.0))
+                    .child(
+                        row()
+                            .gap(4.0)
+                            .center_y()
+                            .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
+                            .child(text(".ics Synced").font(FONT_CHIP).color(TEXT_MUTED)),
+                    ),
+            )
+            .child(
+                col()
+                    .w_full()
+                    .min_w(0.0)
+                    .padding(8.0)
+                    .gap(3.0)
+                    .radius(12.0)
+                    .fill(CAL_TILE_BG)
+                    .border(1.0, CAL_FEATURED_BORDER)
+                    .child(
+                        row()
+                            .w_full()
+                            .min_w(0.0)
+                            .center_y()
+                            .child(text("Starts in 18 min").font(FONT_CHIP).color(accent))
+                            .child(el().grow(1.0))
+                            .child(text("11:00 AM").font(FONT_META).color(TEXT_MUTED)),
+                    )
+                    .child(
+                        row()
+                            .w_full()
+                            .min_w(0.0)
+                            .center_y()
+                            .child(
+                                col().grow(1.0).min_w(0.0).child(
+                                    text(feat_title_disp)
+                                        .font(FONT_PRIMARY_LINE)
+                                        .color(TEXT_PRIMARY),
+                                ),
+                            )
+                            .child(
+                                el().px(7.0).py(2.0).radius(8.0).fill(accent).child(
+                                    text("JOIN →").font(FONT_CHIP).color(TEXT_BUTTON_INVERTED),
+                                ),
+                            ),
+                    )
+                    .child(text(feat_meta_disp).font(FONT_META).color(TEXT_MUTED)),
+            );
 
     for (title, sub, bar_color) in secondary_rows {
         let t_disp = truncate_preview(&title, 18);
@@ -1172,7 +1218,8 @@ fn render_hub(state: &AppState, accent: Color) -> El {
         .padding(12.0)
         .gap(6.0)
         .radius(22.0)
-        .fill(CARD_SURFACE)
+        .fill(card_fill)
+        .border(card_border_width, card_border)
         .child(
             row()
                 .w_full()
@@ -1401,6 +1448,13 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         IslandState::Hub { .. } => render_hub(state, accent),
     };
 
+    let is_glass = state.state_machine.is_glass_effect_enabled();
+    let (pill_fill, pill_border) = if is_glass {
+        (GLASS_ISLAND_BG, GLASS_ISLAND_BORDER)
+    } else {
+        (SOLID_ISLAND_BG, SOLID_ISLAND_BORDER)
+    };
+
     let pill = el()
         .key("cay-island-pill")
         .hit()
@@ -1408,8 +1462,8 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         .label("Cay floating island")
         .size(width, height)
         .radius(radius)
-        .fill(ISLAND_BG)
-        .border(1.0, ISLAND_BORDER)
+        .fill(pill_fill)
+        .border(1.0, pill_border)
         .motion(PILL_SPRING)
         .on_hover_change(|s: &mut AppState, inside, _| {
             s.state_machine.set_hovered(inside);
@@ -1474,6 +1528,7 @@ fn build_tray_menu() -> Vec<TrayItem> {
         TrayItem::Separator,
         TrayItem::action("toggle_dnd", "Toggle Do Not Disturb (Suppress Peeks)"),
         TrayItem::action("toggle_hover", "Toggle Hover Expansion"),
+        TrayItem::action("toggle_glass", "Toggle Frosted Glass Effect"),
         TrayItem::action("enable_autostart", "Enable Start with Windows"),
         TrayItem::action("disable_autostart", "Disable Start with Windows"),
         TrayItem::Separator,
@@ -1674,6 +1729,11 @@ fn main() {
                     "toggle_hover" => tray_pill.update(|s, _| {
                         let next = !s.state_machine.settings().hover_expand_enabled;
                         s.state_machine.set_hover_expand_enabled(next);
+                        let _ = s.state_machine.settings().save_default();
+                    }),
+                    "toggle_glass" => tray_pill.update(|s, _| {
+                        let next = !s.state_machine.is_glass_effect_enabled();
+                        s.state_machine.set_glass_effect_enabled(next);
                         let _ = s.state_machine.settings().save_default();
                     }),
                     "enable_autostart" => {

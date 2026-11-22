@@ -243,6 +243,14 @@ impl IslandStateMachine {
         self.settings.accent = accent;
     }
 
+    pub fn is_glass_effect_enabled(&self) -> bool {
+        self.settings.glass_effect_enabled
+    }
+
+    pub fn set_glass_effect_enabled(&mut self, enabled: bool) {
+        self.settings.glass_effect_enabled = enabled;
+    }
+
     pub fn set_monitor_choice(&mut self, choice: MonitorChoice) {
         self.settings.monitor_choice = choice;
     }
@@ -719,6 +727,18 @@ mod tests {
         // Toggling hub while hovered closes it and suppresses hover
         sm.toggle_hub();
         assert!(!sm.is_hub_open());
+    }
+
+    #[test]
+    fn test_glass_effect_toggle() {
+        let mut sm = IslandStateMachine::new();
+        assert!(sm.is_glass_effect_enabled());
+
+        sm.set_glass_effect_enabled(false);
+        assert!(!sm.is_glass_effect_enabled());
+
+        sm.set_glass_effect_enabled(true);
+        assert!(sm.is_glass_effect_enabled());
     }
 
     #[test]
