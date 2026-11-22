@@ -1337,13 +1337,27 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .gap(6.0)
                 .center_y()
                 .child(
-                    el().px(5.0)
+                    el().key("hub-btn-toggle-shortcut")
+                        .role("button")
+                        .label("Toggle deck shortcut")
+                        .px(5.0)
                         .py(1.0)
                         .radius(4.0)
                         .fill(TRACK_BG)
-                        .child(text("Win + Alt + I").font(FONT_CHIP).color(accent)),
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.toggle_hub();
+                        })
+                        .child(text("Ctrl + Alt + I").font(FONT_CHIP).color(accent)),
                 )
-                .child(text("to toggle deck").font(FONT_META).color(TEXT_MUTED)),
+                .child(
+                    el().key("hub-btn-toggle-label")
+                        .role("button")
+                        .label("Toggle deck")
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.toggle_hub();
+                        })
+                        .child(text("to toggle deck").font(FONT_META).color(TEXT_MUTED)),
+                ),
         );
 
     col()
@@ -1553,7 +1567,7 @@ fn main() {
 
         pill.show();
 
-        // Register global keyboard shortcut `Win + Alt + I` to toggle the Expanded Hub
+        // Register global keyboard shortcuts (Ctrl + Alt + I, Win + Shift + I, Win + Alt + I) to toggle the Expanded Hub
         #[cfg(windows)]
         {
             let hotkey_pill = pill.clone();

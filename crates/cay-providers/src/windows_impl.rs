@@ -19,7 +19,9 @@ use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
 use windows::Win32::System::ProcessStatus::{K32GetProcessMemoryInfo, PROCESS_MEMORY_COUNTERS};
 use windows::Win32::System::SystemInformation::GetLocalTime;
 use windows::Win32::System::Threading::{GetCurrentProcess, GetCurrentProcessId};
-use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, MOD_ALT, MOD_NOREPEAT, MOD_WIN};
+use windows::Win32::UI::Input::KeyboardAndMouse::{
+    RegisterHotKey, UnregisterHotKey, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
+};
 use windows::Win32::UI::Shell::{
     SHQueryUserNotificationState, QUNS_ACCEPTS_NOTIFICATIONS, QUNS_APP, QUNS_PRESENTATION_MODE,
     QUNS_RUNNING_D3D_FULL_SCREEN,
@@ -27,7 +29,8 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClassNameW, GetDesktopWindow, GetForegroundWindow, GetMessageW, GetShellWindow,
     GetWindowLongW, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
-    GWL_EXSTYLE, GWL_STYLE, MSG, WM_HOTKEY, WS_CAPTION, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
+    PeekMessageW, GWL_EXSTYLE, GWL_STYLE, MSG, PM_NOREMOVE, WM_HOTKEY, WS_CAPTION,
+    WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
 };
 use windows::UI::Notifications::Management::{
     UserNotificationListener, UserNotificationListenerAccessStatus,
@@ -615,23 +618,45 @@ pub fn is_windows_quiet_hours_active() -> bool {
     }
 }
 
-/// Spawns a dedicated background message thread that registers the global shortcut `Win + Alt + I`
-/// and invokes `on_hotkey` whenever the user presses it.
+/// Spawns a dedicated background message thread that registers global shortcuts
+/// (Ctrl + Alt + I, Win + Shift + I, Win + Alt + I) and invokes `on_hotkey` whenever pressed.
 pub fn spawn_global_hotkey_listener(on_hotkey: impl Fn() + Send + 'static) {
     let _ = std::thread::Builder::new()
         .name("cay-hotkey-listener".into())
         .spawn(move || {
-            // SAFETY: RegisterHotKey and GetMessageW operate on this thread's win32 message queue.
+            // SAFETY: RegisterHotKey, PeekMessageW, and GetMessageW operate on this thread's win32 message queue.
             unsafe {
-                let mods = MOD_WIN | MOD_ALT | MOD_NOREPEAT;
-                if RegisterHotKey(None, 1, mods, u32::from(b'I')).is_err() {
+                let mut msg = MSG::default();
+                // Ensure the background thread has an initialized Win32 message queue.
+                let _ = PeekMessageW(&mut msg, None, 0, 0, PM_NOREMOVE);
+
+                let candidates = [
+                    (1, MOD_CONTROL | MOD_ALT | MOD_NOREPEAT, u32::from(b'I')),
+                    (2, MOD_WIN | MOD_SHIFT | MOD_NOREPEAT, u32::from(b'I')),
+                    (3, MOD_WIN | MOD_ALT | MOD_NOREPEAT, u32::from(b'I')),
+                    (4, MOD_CONTROL | MOD_SHIFT | MOD_NOREPEAT, u32::from(b'I')),
+                ];
+
+                let mut registered_ids = Vec::new();
+                for (id, mods, vk) in candidates {
+                    if RegisterHotKey(None, id, mods, vk).is_ok() {
+                        registered_ids.push(id);
+                    }
+                }
+
+                if registered_ids.is_empty() {
+                    tracing::warn!("Failed to register any global deck hotkeys");
                     return;
                 }
-                let mut msg = MSG::default();
+
                 while GetMessageW(&mut msg, None, 0, 0).0 > 0 {
                     if msg.message == WM_HOTKEY {
                         on_hotkey();
                     }
+                }
+
+                for id in registered_ids {
+                    let _ = UnregisterHotKey(None, id);
                 }
             }
         });

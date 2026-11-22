@@ -163,6 +163,7 @@ pub struct IslandStateMachine {
     active_hud: Option<HudState>,
     hud_remaining_secs: f32,
     battery_status: BatteryStatus,
+    hover_suppressed: bool,
 }
 
 impl Default for IslandStateMachine {
@@ -186,6 +187,7 @@ impl Default for IslandStateMachine {
             active_hud: None,
             hud_remaining_secs: 0.0,
             battery_status: BatteryStatus::default(),
+            hover_suppressed: false,
         }
     }
 }
@@ -209,11 +211,15 @@ impl IslandStateMachine {
     }
 
     pub fn is_hub_open(&self) -> bool {
-        self.is_hub_expanded || (self.settings.hover_expand_enabled && self.is_hovered)
+        self.is_hub_expanded
+            || (self.settings.hover_expand_enabled && self.is_hovered && !self.hover_suppressed)
     }
 
     pub fn set_hovered(&mut self, hovered: bool) {
         self.is_hovered = hovered;
+        if !hovered {
+            self.hover_suppressed = false;
+        }
     }
 
     pub fn set_hover_expand_enabled(&mut self, enabled: bool) {
@@ -364,12 +370,19 @@ impl IslandStateMachine {
     }
 
     pub fn toggle_hub(&mut self) {
-        self.is_hub_expanded = !self.is_hub_expanded;
+        if self.is_hub_open() {
+            self.is_hub_expanded = false;
+            self.hover_suppressed = true;
+        } else {
+            self.is_hub_expanded = true;
+            self.hover_suppressed = false;
+        }
     }
 
     pub fn close_hub(&mut self) {
         self.is_hub_expanded = false;
         self.is_hovered = false;
+        self.hover_suppressed = true;
     }
 
     pub fn set_media(&mut self, media: Option<MediaInfo>) {
@@ -685,6 +698,27 @@ mod tests {
         sm.set_hovered(true);
         assert!(!sm.is_hub_open());
         assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+    }
+
+    #[test]
+    fn test_hub_toggle_and_close_while_hovered_suppresses_reopen() {
+        let mut sm = IslandStateMachine::new();
+        sm.set_hovered(true);
+        assert!(sm.is_hub_open());
+
+        // Closing hub while still hovered must suppress hover re-open
+        sm.close_hub();
+        assert!(!sm.is_hub_open());
+
+        // Moving mouse away and re-entering restores hover expansion
+        sm.set_hovered(false);
+        assert!(!sm.is_hub_open());
+        sm.set_hovered(true);
+        assert!(sm.is_hub_open());
+
+        // Toggling hub while hovered closes it and suppresses hover
+        sm.toggle_hub();
+        assert!(!sm.is_hub_open());
     }
 
     #[test]
