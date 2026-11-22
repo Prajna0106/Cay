@@ -2501,6 +2501,50 @@ fn render_settings(state: &AppState, accent: Color) -> El {
                                 ),
                         ),
                 )
+                .child(
+                    row()
+                        .gap(8.0)
+                        .child(
+                            el().key("btn-diag-simulator")
+                                .role("button")
+                                .label("Open Island Simulator")
+                                .px(12.0)
+                                .py(6.0)
+                                .radius(6.0)
+                                .fill(accent.alpha(0.20))
+                                .border(1.0, accent)
+                                .on_press(|s: &mut AppState| {
+                                    s.state_machine.open_simulator();
+                                })
+                                .child(
+                                    row()
+                                        .gap(6.0)
+                                        .center_y()
+                                        .child(icon(&ICON_MONITOR, 12.0).color(accent))
+                                        .child(text("Open Island Simulator").font(FONT_CHIP).color(accent)),
+                                ),
+                        )
+                        .child(
+                            el().key("btn-diag-detach-widget")
+                                .role("button")
+                                .label("Detach Telemetry Widget")
+                                .px(12.0)
+                                .py(6.0)
+                                .radius(6.0)
+                                .fill(TRACK_BG)
+                                .border(1.0, GLASS_CARD_BORDER)
+                                .on_press(|s: &mut AppState| {
+                                    s.state_machine.open_telemetry_widget();
+                                })
+                                .child(
+                                    row()
+                                        .gap(6.0)
+                                        .center_y()
+                                        .child(icon(&ICON_CPU, 12.0).color(TEXT_SECONDARY))
+                                        .child(text("Detach Telemetry Widget").font(FONT_CHIP).color(TEXT_SECONDARY)),
+                                ),
+                        ),
+                )
         }
     };
 
@@ -2595,6 +2639,717 @@ fn render_settings(state: &AppState, accent: Color) -> El {
         .child(action_bar)
 }
 
+fn render_simulator(state: &AppState, accent: Color) -> El {
+    let sm = &state.state_machine;
+    let is_glass = sm.is_glass_effect_enabled();
+    let card_bg = if is_glass {
+        GLASS_CARD_SURFACE
+    } else {
+        SOLID_CARD_SURFACE
+    };
+    let card_border = if is_glass {
+        GLASS_CARD_BORDER
+    } else {
+        SOLID_CARD_BORDER
+    };
+
+    let top_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(22.0)
+        .px(4.0)
+        .center_y()
+        .child(
+            row()
+                .gap(6.0)
+                .center_y()
+                .child(icon(&ICON_MONITOR, 14.0).color(accent))
+                .child(
+                    text("ISLAND VIEWPORT SIMULATOR")
+                        .font(FONT_CAPS_LABEL)
+                        .color(TEXT_PRIMARY),
+                )
+                .child(
+                    el().px(6.0)
+                        .py(1.0)
+                        .radius(4.0)
+                        .fill(ACCENT_LIME.alpha(0.18))
+                        .border(1.0, ACCENT_LIME.alpha(0.50))
+                        .child(
+                            text("PASS-THROUGH ACTIVE")
+                                .font(FONT_CHIP)
+                                .color(ACCENT_LIME),
+                        ),
+                )
+                .child(
+                    text("Anchor Y: 14px top-center")
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            row()
+                .gap(8.0)
+                .center_y()
+                .child(text("Esc to dismiss").font(FONT_META).color(TEXT_MUTED))
+                .child(
+                    el().key("simulator-btn-close")
+                        .role("button")
+                        .label("Close Simulator")
+                        .size(18.0, 18.0)
+                        .radius(9.0)
+                        .fill(TRACK_BG)
+                        .center()
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.close_simulator();
+                        })
+                        .child(icon(&ICON_CLOSE, 10.0).color(TEXT_SECONDARY)),
+                ),
+        );
+
+    // State Selection Ribbon
+    let preview_idx = sm.simulated_preview_index();
+    let state_ribbon_items = [
+        (0, "Now Playing", &ICON_MUSIC),
+        (1, "Notification", &ICON_BELL),
+        (2, "Teams Sync", &ICON_CALENDAR),
+        (3, "Pomodoro", &ICON_TIMER),
+        (4, "Volume HUD", &ICON_VOLUME),
+        (5, "Minimal Idle", &ICON_BATTERY),
+    ];
+
+    let mut ribbon_row = row().w_full().min_w(0.0).gap(6.0).center_y();
+    for (idx, label, ic) in state_ribbon_items {
+        let is_selected = preview_idx == idx;
+        let (bg, border, text_col) = if is_selected {
+            (accent.alpha(0.20), accent, accent)
+        } else {
+            (TRACK_BG, GLASS_CARD_BORDER, TEXT_MUTED)
+        };
+
+        ribbon_row = ribbon_row.child(
+            el().key(format!("btn-sim-state-{}", idx))
+                .role("button")
+                .label(label)
+                .px(10.0)
+                .py(6.0)
+                .radius(8.0)
+                .fill(bg)
+                .border(1.0, border)
+                .on_press(move |s: &mut AppState| {
+                    s.state_machine.set_simulated_preview_index(idx);
+                })
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(ic, 13.0).color(text_col))
+                        .child(text(label).font(FONT_CHIP).color(if is_selected {
+                            TEXT_PRIMARY
+                        } else {
+                            TEXT_SECONDARY
+                        })),
+                ),
+        );
+    }
+
+    // Dynamic Island Simulation Live Rendering
+    let (pill_bg, pill_border) = if is_glass {
+        (GLASS_ISLAND_BG, GLASS_ISLAND_BORDER)
+    } else {
+        (SOLID_ISLAND_BG, SOLID_ISLAND_BORDER)
+    };
+
+    let simulated_pill = match preview_idx {
+        0 => {
+            // Now Playing (Tycho - Solar Drift)
+            let heights = [8.0_f32, 14.0, 10.0, 16.0, 6.0];
+            let mut waveform = row().gap(3.0).center_y().h(16.0);
+            for idx in 0..heights.len() {
+                let bar_h = heights[(idx + state.waveform_phase) % heights.len()];
+                waveform = waveform.child(
+                    el().key(format!("sim-wave-{idx}"))
+                        .size(3.0, bar_h)
+                        .radius(2.0)
+                        .fill(accent),
+                );
+            }
+
+            row()
+                .size(360.0, 46.0)
+                .radius(23.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(12.0)
+                .gap(10.0)
+                .child(render_album_tile(28.0, 6.0, 14.0, None))
+                .child(
+                    col()
+                        .gap(1.0)
+                        .child(
+                            text("Solar Drift")
+                                .font(FONT_BODY_SEMIBOLD)
+                                .color(TEXT_PRIMARY),
+                        )
+                        .child(text("Tycho · Epoch").font(FONT_META).color(TEXT_SECONDARY)),
+                )
+                .child(el().grow(1.0))
+                .child(waveform)
+                .child(
+                    row()
+                        .gap(4.0)
+                        .center_y()
+                        .child(icon(&ICON_PREV, 12.0).color(TEXT_MUTED))
+                        .child(
+                            el().size(20.0, 20.0)
+                                .radius(10.0)
+                                .fill(accent)
+                                .center()
+                                .child(icon(&ICON_PAUSE, 10.0).color(TEXT_BUTTON_INVERTED)),
+                        )
+                        .child(icon(&ICON_NEXT, 12.0).color(TEXT_MUTED)),
+                )
+        }
+        1 => {
+            // Notification Peek (Elena Rostova via Outlook)
+            row()
+                .size(440.0, 68.0)
+                .radius(24.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(14.0)
+                .gap(10.0)
+                .child(
+                    el().size(30.0, 30.0)
+                        .radius(15.0)
+                        .fill(ACCENT_PURPLE.alpha(0.30))
+                        .center()
+                        .child(text("EL").font(FONT_CHIP).color(ACCENT_PURPLE)),
+                )
+                .child(
+                    col()
+                        .grow(1.0)
+                        .gap(2.0)
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .center_y()
+                                .child(
+                                    text("Elena Rostova")
+                                        .font(FONT_BODY_SEMIBOLD)
+                                        .color(TEXT_PRIMARY),
+                                )
+                                .child(text("via Outlook").font(FONT_META).color(TEXT_MUTED))
+                                .child(el().grow(1.0))
+                                .child(text("Now").font(FONT_CHIP).color(TEXT_MUTED)),
+                        )
+                        .child(
+                            text("Q3 Architecture Review: Updated telemetry packet metrics...")
+                                .font(FONT_META)
+                                .color(TEXT_SECONDARY),
+                        ),
+                )
+                .child(
+                    el().px(8.0)
+                        .py(4.0)
+                        .radius(4.0)
+                        .fill(accent)
+                        .child(text("Reply").font(FONT_CHIP).color(TEXT_BUTTON_INVERTED)),
+                )
+        }
+        2 => {
+            // Teams Meeting (Product Sync)
+            row()
+                .size(400.0, 52.0)
+                .radius(24.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(14.0)
+                .gap(10.0)
+                .child(icon(&ICON_CALENDAR, 18.0).color(accent))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .gap(2.0)
+                        .child(
+                            row()
+                                .gap(6.0)
+                                .center_y()
+                                .child(el().size(5.0, 5.0).radius(2.5).fill(ACCENT_LIME))
+                                .child(text("In 8 Minutes").font(FONT_CHIP).color(ACCENT_LIME)),
+                        )
+                        .child(
+                            text("Product Sync: HUD Interaction Specs")
+                                .font(FONT_BODY_SEMIBOLD)
+                                .color(TEXT_PRIMARY),
+                        ),
+                )
+                .child(
+                    el().px(10.0)
+                        .py(5.0)
+                        .radius(6.0)
+                        .fill(accent)
+                        .child(text("Join").font(FONT_CHIP).color(TEXT_BUTTON_INVERTED)),
+                )
+        }
+        3 => {
+            // Pomodoro Focus Timer
+            row()
+                .size(280.0, 46.0)
+                .radius(23.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(14.0)
+                .gap(10.0)
+                .child(icon(&ICON_TIMER, 16.0).color(ACCENT_WARM))
+                .child(
+                    text("Focus Sprint")
+                        .font(FONT_BODY_SEMIBOLD)
+                        .color(TEXT_PRIMARY),
+                )
+                .child(el().grow(1.0))
+                .child(text("18:42").font(FONT_TIMER).color(ACCENT_WARM))
+                .child(icon(&ICON_PAUSE, 12.0).color(TEXT_MUTED))
+        }
+        4 => {
+            // Volume HUD
+            row()
+                .size(300.0, 46.0)
+                .radius(23.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(14.0)
+                .gap(10.0)
+                .child(icon(&ICON_VOLUME, 16.0).color(accent))
+                .child(
+                    col()
+                        .grow(1.0)
+                        .gap(4.0)
+                        .child(
+                            row()
+                                .center_y()
+                                .child(text("Volume").font(FONT_CHIP).color(TEXT_MUTED))
+                                .child(el().grow(1.0))
+                                .child(text("74% · Realtek HD").font(FONT_CHIP).color(accent)),
+                        )
+                        .child(
+                            el().w_full()
+                                .h(4.0)
+                                .radius(2.0)
+                                .fill(TRACK_BG)
+                                .child(el().w(160.0).h_full().radius(2.0).fill(accent)),
+                        ),
+                )
+        }
+        _ => {
+            // Minimal Idle
+            row()
+                .size(200.0, 40.0)
+                .radius(20.0)
+                .fill(pill_bg)
+                .border(1.0, pill_border)
+                .center_y()
+                .px(14.0)
+                .gap(8.0)
+                .child(text("10:42 AM").font(FONT_CLOCK).color(TEXT_PRIMARY))
+                .child(el().grow(1.0))
+                .child(el().size(6.0, 6.0).radius(3.0).fill(accent))
+                .child(icon(&ICON_BATTERY, 14.0).color(ACCENT_LIME))
+                .child(text("94%").font(FONT_CHIP).color(ACCENT_LIME))
+        }
+    };
+
+    let preview_container = col()
+        .w_full()
+        .h(110.0)
+        .radius(12.0)
+        .fill(card_bg)
+        .border(1.0, card_border)
+        .center()
+        .gap(8.0)
+        .child(
+            // Ambient Aura Halo
+            el().center()
+                .radius(26.0)
+                .border(2.0, accent.alpha(0.35))
+                .padding(4.0)
+                .child(simulated_pill),
+        )
+        .child(
+            text("Click Island or press Ctrl + Alt + I to toggle Hub · Non-blocking Overlay Layer Active")
+                .font(FONT_META)
+                .color(TEXT_MUTED),
+        );
+
+    // Bottom Bento Grid (4 Cards from Stitch Screen 3)
+    let bento_grid = row()
+        .w_full()
+        .grow(1.0)
+        .min_w(0.0)
+        .gap(8.0)
+        .child(
+            // Card 1: Win32 Hook Layer
+            col()
+                .w(194.0)
+                .padding(10.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .gap(3.0)
+                .child(
+                    row()
+                        .center_y()
+                        .gap(6.0)
+                        .child(icon(&ICON_SHIELD, 14.0).color(accent))
+                        .child(text("WIN32 HOOK LAYER").font(FONT_CAPS_LABEL).color(accent))
+                        .child(el().grow(1.0))
+                        .child(el().size(6.0, 6.0).radius(3.0).fill(ACCENT_LIME)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("WS_TOPMOST").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("0x0008 [OK]").font(FONT_CHIP).color(ACCENT_LIME)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("NOACTIVATE").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("0x0800 [OK]").font(FONT_CHIP).color(ACCENT_LIME)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("TRANSPARENT").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("DYNAMIC").font(FONT_CHIP).color(accent)),
+                )
+                .child(
+                    text("Zero focus stealing. Dynamic clip.")
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                ),
+        )
+        .child(
+            // Card 2: DirectX 12 Compositor
+            col()
+                .w(194.0)
+                .padding(10.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .gap(3.0)
+                .child(
+                    row()
+                        .center_y()
+                        .gap(6.0)
+                        .child(icon(&ICON_CPU, 14.0).color(ACCENT_LIME))
+                        .child(
+                            text("D3D12 COMPOSITOR")
+                                .font(FONT_CAPS_LABEL)
+                                .color(ACCENT_LIME),
+                        )
+                        .child(el().grow(1.0))
+                        .child(text("120 FPS").font(FONT_CHIP).color(ACCENT_LIME)),
+                )
+                .child(
+                    row()
+                        .center_y()
+                        .gap(6.0)
+                        .child(text("0.8").font(FONT_TIMER).color(TEXT_PRIMARY))
+                        .child(text("ms / frame").font(FONT_META).color(TEXT_MUTED))
+                        .child(el().grow(1.0))
+                        .child(text("14.2 MB VRAM").font(FONT_CHIP).color(accent)),
+                )
+                .child(
+                    el().w_full()
+                        .h(4.0)
+                        .radius(2.0)
+                        .fill(card_border)
+                        .child(el().w(26.0).h_full().radius(2.0).fill(ACCENT_LIME)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("GPU Budget Used").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("1.4% of D3D12").font(FONT_CHIP).color(TEXT_SECONDARY)),
+                ),
+        )
+        .child(
+            // Card 3: Target Display
+            col()
+                .w(194.0)
+                .padding(10.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .gap(3.0)
+                .child(
+                    row()
+                        .center_y()
+                        .gap(6.0)
+                        .child(icon(&ICON_MONITOR, 14.0).color(accent))
+                        .child(text("TARGET DISPLAY").font(FONT_CAPS_LABEL).color(accent))
+                        .child(el().grow(1.0))
+                        .child(text("DISPLAY 1").font(FONT_CHIP).color(TEXT_MUTED)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Resolution").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("2560×1440 QHD").font(FONT_META).color(TEXT_PRIMARY)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Refresh Rate").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("165 Hz Sync").font(FONT_META).color(TEXT_SECONDARY)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("DPI Scale").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("100% Native").font(FONT_CHIP).color(accent)),
+                )
+                .child(
+                    text("Bounds: Top 14px center")
+                        .font(FONT_META)
+                        .color(TEXT_MUTED),
+                ),
+        )
+        .child(
+            // Card 4: Keyboard Triggers
+            col()
+                .w(194.0)
+                .padding(10.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .gap(3.0)
+                .child(
+                    row()
+                        .center_y()
+                        .gap(6.0)
+                        .child(icon(&ICON_KEYBOARD, 14.0).color(ACCENT_WARM))
+                        .child(
+                            text("GLOBAL TRIGGERS")
+                                .font(FONT_CAPS_LABEL)
+                                .color(ACCENT_WARM),
+                        )
+                        .child(el().grow(1.0))
+                        .child(el().size(6.0, 6.0).radius(3.0).fill(ACCENT_WARM)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Expand Deck").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("Ctrl+Alt+I").font(FONT_CHIP).color(accent)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Alternative").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("Win+Shift+I").font(FONT_CHIP).color(TEXT_SECONDARY)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Dismiss").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("Esc").font(FONT_CHIP).color(TEXT_MUTED)),
+                )
+                .child(
+                    row()
+                        .justify_between()
+                        .child(text("Global Hook").font(FONT_META).color(TEXT_MUTED))
+                        .child(text("Listening").font(FONT_CHIP).color(ACCENT_LIME)),
+                ),
+        );
+
+    // Bottom Action Bar
+    let action_bar = row()
+        .w_full()
+        .min_w(0.0)
+        .h(30.0)
+        .center_y()
+        .gap(10.0)
+        .child(
+            el().key("btn-sim-detach-widget")
+                .role("button")
+                .label("Detach Telemetry Widget")
+                .px(12.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(accent.alpha(0.20))
+                .border(1.0, accent)
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.open_telemetry_widget();
+                })
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(&ICON_CPU, 12.0).color(accent))
+                        .child(
+                            text("Detach Telemetry Widget")
+                                .font(FONT_CHIP)
+                                .color(accent),
+                        ),
+                ),
+        )
+        .child(el().grow(1.0))
+        .child(
+            el().key("btn-sim-open-settings")
+                .role("button")
+                .label("Open Preferences")
+                .px(12.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, GLASS_CARD_BORDER)
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.open_settings();
+                })
+                .child(
+                    row()
+                        .gap(6.0)
+                        .center_y()
+                        .child(icon(&ICON_SETTINGS, 12.0).color(TEXT_SECONDARY))
+                        .child(text("Preferences...").font(FONT_CHIP).color(TEXT_SECONDARY)),
+                ),
+        )
+        .child(
+            el().key("btn-sim-close")
+                .role("button")
+                .label("Close")
+                .px(12.0)
+                .py(6.0)
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, GLASS_CARD_BORDER)
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.close_simulator();
+                })
+                .child(text("Close").font(FONT_CHIP).color(TEXT_MUTED)),
+        );
+
+    col()
+        .key("content-simulator")
+        .w_full()
+        .h_full()
+        .padding(14.0)
+        .gap(8.0)
+        .child(top_bar)
+        .child(ribbon_row)
+        .child(preview_container)
+        .child(bento_grid)
+        .child(action_bar)
+}
+
+fn render_telemetry_widget(state: &AppState, accent: Color) -> El {
+    let sm = &state.state_machine;
+    let is_glass = sm.is_glass_effect_enabled();
+    let card_border = if is_glass {
+        GLASS_CARD_BORDER
+    } else {
+        SOLID_CARD_BORDER
+    };
+
+    let header = row()
+        .w_full()
+        .h(16.0)
+        .center_y()
+        .gap(6.0)
+        .child(el().size(6.0, 6.0).radius(3.0).fill(ACCENT_LIME))
+        .child(
+            text("CAY · DETACHED TELEMETRY WIDGET")
+                .font(FONT_CAPS_LABEL)
+                .color(TEXT_SECONDARY),
+        )
+        .child(el().grow(1.0))
+        .child(
+            el().key("widget-btn-simulator")
+                .role("button")
+                .label("Open Simulator")
+                .size(16.0, 16.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .center()
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.open_simulator();
+                })
+                .child(icon(&ICON_MONITOR, 10.0).color(accent)),
+        )
+        .child(
+            el().key("widget-btn-close")
+                .role("button")
+                .label("Close Widget")
+                .size(16.0, 16.0)
+                .radius(8.0)
+                .fill(TRACK_BG)
+                .center()
+                .on_press(|s: &mut AppState| {
+                    s.state_machine.close_telemetry_widget();
+                })
+                .child(icon(&ICON_CLOSE, 9.0).color(TEXT_MUTED)),
+        );
+
+    let pills = row()
+        .w_full()
+        .h(32.0)
+        .center_y()
+        .gap(6.0)
+        .child(
+            el().grow(1.0)
+                .h_full()
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .center()
+                .child(text("DX12 0.8ms").font(FONT_CHIP).color(accent)),
+        )
+        .child(
+            el().grow(1.0)
+                .h_full()
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .center()
+                .child(text("GPU 1.4%").font(FONT_CHIP).color(ACCENT_LIME)),
+        )
+        .child(
+            el().grow(1.0)
+                .h_full()
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .center()
+                .child(text("RAM ~24MB").font(FONT_CHIP).color(TEXT_SECONDARY)),
+        )
+        .child(
+            el().grow(1.0)
+                .h_full()
+                .radius(6.0)
+                .fill(TRACK_BG)
+                .border(1.0, card_border)
+                .center()
+                .child(text("DWM 60Hz").font(FONT_CHIP).color(TEXT_PRIMARY)),
+        );
+
+    col()
+        .key("content-telemetry-widget")
+        .w_full()
+        .h_full()
+        .padding(10.0)
+        .gap(6.0)
+        .child(header)
+        .child(pills)
+}
+
 fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
     let current = state.state_machine.current_state();
     let IslandDimensions {
@@ -2615,6 +3370,8 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         IslandState::Hud { hud } => render_hud(hud),
         IslandState::Hub { .. } => render_hub(state, accent),
         IslandState::Settings => render_settings(state, accent),
+        IslandState::Simulator => render_simulator(state, accent),
+        IslandState::TelemetryWidget => render_telemetry_widget(state, accent),
     };
 
     let is_glass = state.state_machine.is_glass_effect_enabled();
@@ -2638,7 +3395,10 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
             s.state_machine.set_hovered(inside);
         })
         .on_press(|s: &mut AppState| {
-            if !s.state_machine.is_settings_open() {
+            if !s.state_machine.is_settings_open()
+                && !s.state_machine.is_simulator_open()
+                && !s.state_machine.is_telemetry_widget_open()
+            {
                 s.state_machine.toggle_hub();
             }
         })
@@ -2673,6 +3433,8 @@ fn build_tray_icon() -> TrayIcon {
 fn build_tray_menu() -> Vec<TrayItem> {
     vec![
         TrayItem::action("open_settings", "Settings & Preferences..."),
+        TrayItem::action("open_simulator", "Desktop Island Simulator..."),
+        TrayItem::action("toggle_widget", "Toggle Floating Telemetry Widget"),
         TrayItem::action("toggle_hub", "Toggle Expanded Hub"),
         TrayItem::Separator,
         TrayItem::action("timer_start_25", "Focus Timer: Start 25 min"),
@@ -2710,6 +3472,14 @@ fn build_tray_menu() -> Vec<TrayItem> {
 
 fn handle_key(s: &mut AppState, event: &KeyEvent, _: &mut Tx) -> bool {
     if event.key == Key::Escape {
+        if s.state_machine.is_simulator_open() {
+            s.state_machine.close_simulator();
+            return true;
+        }
+        if s.state_machine.is_telemetry_widget_open() {
+            s.state_machine.close_telemetry_widget();
+            return true;
+        }
         if s.state_machine.is_settings_open() {
             s.state_machine.close_settings();
             return true;
@@ -2759,6 +3529,12 @@ fn spec() -> AppSpec<AppState> {
             }),
             ("settings", |s| {
                 s.state_machine.open_settings();
+            }),
+            ("simulator", |s| {
+                s.state_machine.open_simulator();
+            }),
+            ("widget", |s| {
+                s.state_machine.open_telemetry_widget();
             }),
         ],
         ..AppSpec::new("Cay", (880.0, 500.0), AppState::default, island_view)
@@ -2825,6 +3601,10 @@ fn main() {
                 }
                 TrayEvent::Menu(id) => match id.as_str() {
                     "open_settings" => tray_pill.update(|s, _| s.state_machine.open_settings()),
+                    "open_simulator" => tray_pill.update(|s, _| s.state_machine.open_simulator()),
+                    "toggle_widget" => {
+                        tray_pill.update(|s, _| s.state_machine.toggle_telemetry_widget())
+                    }
                     "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
                     "timer_start_25" => tray_pill.update(|s, _| {
                         s.state_machine.start_focus_timer(25 * 60, "Focus");

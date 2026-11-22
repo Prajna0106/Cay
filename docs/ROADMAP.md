@@ -80,10 +80,21 @@ flowchart LR
 
 ## Phase 3: P2 Extensions & Ecosystem
 
-**Goal**: Advanced widgets and extensible architecture.
+**Goal**: Advanced widgets, simulator suite, and extensible architecture.
 
-### Scope
-- **Synced Lyrics Display**: Streaming karaoke-style lyrics line during media playback.
-- **Clipboard & File Holding Shelf**: Temporary drop-zone for quick drag-and-drop operations between monitors.
-- **Weather Indicator**: Ambient temperature and forecast icon in idle state.
-- **Plugin Sandbox**: Extensible API for community integrations.
+### Scope & Verification Status
+- [x] **Desktop Island Simulator (Stitch UI Screen 3)**: Full $840 \times 460\text{ px}$ interactive simulator (`IslandState::Simulator`) featuring:
+  - 6-state interactive switcher ribbon: Now Playing, Notification Peek, Teams Sync, Pomodoro Sprint, Volume HUD, and Minimal Idle.
+  - Live island projection container with ambient halo aura, pass-through badge, and top-center anchor indicator.
+  - 4-card telemetry Bento Grid:
+    1. *Win32 Hook Layer*: `WS_TOPMOST`, `NOACTIVATE`, `HTTRANSPARENT` dynamic clip verification.
+    2. *DirectX 12 Compositor*: Vsync lock, render frame time, VRAM allocation, and GPU budget meter.
+    3. *Target Display*: Resolution (QHD/4K), refresh rate (FreeSync/G-Sync), and DPI scale metrics.
+    4. *Global Triggers*: Shortcuts (`Ctrl + Alt + I`, `Win + Shift + I`, `Esc`) and Windows hook status.
+  - Action bar with direct buttons to detach the telemetry widget capsule, open Settings & Preferences, or dismiss.
+- [x] **Detached Floating Telemetry Widget**: Compact $420 \times 72\text{ px}$ floating pill capsule (`IslandState::TelemetryWidget`) with live indicators (`DX12 0.8ms`, `GPU 1.4%`, `RAM ~24MB`, `DWM 60Hz`), quick-launch button to open the Simulator, and close control.
+- [x] **Diagnostics & System Tray Integration**: Direct launch actions in Settings (`Diagnostics` tab) and Windows System Tray context menu (`Desktop Island Simulator...`, `Toggle Floating Telemetry Widget`).
+- [ ] **Synced Lyrics Display**: Streaming karaoke-style lyrics line during media playback.
+- [ ] **Clipboard & File Holding Shelf**: Temporary drop-zone for quick drag-and-drop operations between monitors.
+- [ ] **Weather Indicator**: Ambient temperature and forecast icon in idle state.
+- [ ] **Plugin Sandbox**: Extensible API for community integrations.

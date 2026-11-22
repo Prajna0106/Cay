@@ -41,6 +41,10 @@ pub enum IslandState {
     },
     /// Dedicated preferences and configuration suite.
     Settings,
+    /// Desktop island viewport simulator & diagnostics bento suite.
+    Simulator,
+    /// Compact floating telemetry HUD widget.
+    TelemetryWidget,
 }
 
 impl IslandState {
@@ -87,6 +91,16 @@ impl IslandState {
                 height: 460.0,
                 radius: 24.0,
             },
+            IslandState::Simulator => IslandDimensions {
+                width: 840.0,
+                height: 460.0,
+                radius: 24.0,
+            },
+            IslandState::TelemetryWidget => IslandDimensions {
+                width: 420.0,
+                height: 72.0,
+                radius: 24.0,
+            },
         }
     }
 
@@ -102,6 +116,8 @@ impl IslandState {
             // Hub is user-toggled; priority ranking applies to automatic pill states.
             IslandState::Hub { .. } => 10,
             IslandState::Settings => 11,
+            IslandState::Simulator => 12,
+            IslandState::TelemetryWidget => 13,
         }
     }
 }
@@ -185,6 +201,9 @@ pub struct IslandStateMachine {
     hover_suppressed: bool,
     is_settings_open: bool,
     active_settings_tab: SettingsTab,
+    is_simulator_open: bool,
+    is_telemetry_widget_open: bool,
+    simulated_preview_index: usize,
 }
 
 impl Default for IslandStateMachine {
@@ -211,6 +230,9 @@ impl Default for IslandStateMachine {
             hover_suppressed: false,
             is_settings_open: false,
             active_settings_tab: SettingsTab::Appearance,
+            is_simulator_open: false,
+            is_telemetry_widget_open: false,
+            simulated_preview_index: 0,
         }
     }
 }
@@ -222,7 +244,11 @@ impl IslandStateMachine {
 
     /// Current visual state to display.
     pub fn current_state(&self) -> IslandState {
-        if self.is_settings_open {
+        if self.is_telemetry_widget_open {
+            IslandState::TelemetryWidget
+        } else if self.is_simulator_open {
+            IslandState::Simulator
+        } else if self.is_settings_open {
             IslandState::Settings
         } else if self.is_hub_open() {
             IslandState::Hub {
@@ -257,6 +283,8 @@ impl IslandStateMachine {
 
     pub fn open_settings(&mut self) {
         self.is_settings_open = true;
+        self.is_simulator_open = false;
+        self.is_telemetry_widget_open = false;
         self.is_hub_expanded = false;
         self.hover_suppressed = true;
     }
@@ -272,6 +300,64 @@ impl IslandStateMachine {
         } else {
             self.open_settings();
         }
+    }
+
+    pub fn is_simulator_open(&self) -> bool {
+        self.is_simulator_open
+    }
+
+    pub fn open_simulator(&mut self) {
+        self.is_simulator_open = true;
+        self.is_telemetry_widget_open = false;
+        self.is_settings_open = false;
+        self.is_hub_expanded = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn close_simulator(&mut self) {
+        self.is_simulator_open = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn toggle_simulator(&mut self) {
+        if self.is_simulator_open {
+            self.close_simulator();
+        } else {
+            self.open_simulator();
+        }
+    }
+
+    pub fn is_telemetry_widget_open(&self) -> bool {
+        self.is_telemetry_widget_open
+    }
+
+    pub fn open_telemetry_widget(&mut self) {
+        self.is_telemetry_widget_open = true;
+        self.is_simulator_open = false;
+        self.is_settings_open = false;
+        self.is_hub_expanded = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn close_telemetry_widget(&mut self) {
+        self.is_telemetry_widget_open = false;
+        self.hover_suppressed = true;
+    }
+
+    pub fn toggle_telemetry_widget(&mut self) {
+        if self.is_telemetry_widget_open {
+            self.close_telemetry_widget();
+        } else {
+            self.open_telemetry_widget();
+        }
+    }
+
+    pub fn simulated_preview_index(&self) -> usize {
+        self.simulated_preview_index
+    }
+
+    pub fn set_simulated_preview_index(&mut self, idx: usize) {
+        self.simulated_preview_index = idx % 6;
     }
 
     pub fn active_settings_tab(&self) -> SettingsTab {
@@ -815,6 +901,34 @@ mod tests {
 
         sm.close_settings();
         assert!(!sm.is_settings_open());
+        assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
+    }
+
+    #[test]
+    fn test_simulator_and_telemetry_widget_state() {
+        let mut sm = IslandStateMachine::new();
+        assert!(!sm.is_simulator_open());
+        assert!(!sm.is_telemetry_widget_open());
+        assert_eq!(sm.simulated_preview_index(), 0);
+
+        sm.open_simulator();
+        assert!(sm.is_simulator_open());
+        assert!(matches!(sm.current_state(), IslandState::Simulator));
+        assert_eq!(sm.current_state().dimensions().width, 840.0);
+        assert_eq!(sm.current_state().dimensions().height, 460.0);
+
+        sm.set_simulated_preview_index(3);
+        assert_eq!(sm.simulated_preview_index(), 3);
+
+        sm.open_telemetry_widget();
+        assert!(sm.is_telemetry_widget_open());
+        assert!(!sm.is_simulator_open());
+        assert!(matches!(sm.current_state(), IslandState::TelemetryWidget));
+        assert_eq!(sm.current_state().dimensions().width, 420.0);
+        assert_eq!(sm.current_state().dimensions().height, 72.0);
+
+        sm.close_telemetry_widget();
+        assert!(!sm.is_telemetry_widget_open());
         assert!(matches!(sm.current_state(), IslandState::Idle { .. }));
     }
 
