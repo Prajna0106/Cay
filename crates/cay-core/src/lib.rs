@@ -5,7 +5,7 @@ pub mod state;
 pub use ics::{parse_ics_datetime, parse_ics_meetings};
 pub use models::{
     AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
-    MonitorChoice, TimerState, ToastNotification,
+    MonitorChoice, PrivacyStatus, TimerState, ToastNotification,
 };
 pub use state::{
     resolve_highest_priority, IslandDimensions, IslandState, IslandStateMachine, SettingsTab,

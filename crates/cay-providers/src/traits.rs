@@ -1,4 +1,6 @@
-use cay_core::models::{BatteryStatus, CalendarMeeting, MediaInfo, ToastNotification};
+use cay_core::models::{
+    BatteryStatus, CalendarMeeting, MediaInfo, PrivacyStatus, ToastNotification,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -32,6 +34,9 @@ pub trait MediaProvider: Send + Sync {
 
     /// Return to the previous track.
     fn previous_track(&self) -> Result<(), ProviderError>;
+
+    /// Seek to a specific playback timestamp in seconds.
+    fn seek_to(&self, position_secs: f64) -> Result<(), ProviderError>;
 }
 
 /// Interface for querying and listening to system toasts.
@@ -58,8 +63,17 @@ pub trait CalendarProvider: Send + Sync {
     ) -> Result<Vec<CalendarMeeting>, ProviderError>;
 }
 
-/// Interface for reading hardware and system battery/power telemetry.
+/// Interface for reading hardware and system battery/power/privacy telemetry.
 pub trait SystemProvider: Send + Sync {
     /// Query current battery level and charging state.
     fn get_battery_status(&self) -> Result<BatteryStatus, ProviderError>;
+
+    /// Set master audio volume percentage (0..=100).
+    fn set_master_volume(&self, percent: u8) -> Result<(), ProviderError>;
+
+    /// Query current hardware privacy status (microphone active, camera active, microphone muted).
+    fn get_privacy_status(&self) -> Result<PrivacyStatus, ProviderError>;
+
+    /// Set global microphone mute state.
+    fn set_microphone_mute(&self, muted: bool) -> Result<(), ProviderError>;
 }

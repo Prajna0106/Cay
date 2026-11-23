@@ -1,5 +1,5 @@
 use crate::traits::{MediaProvider, NotificationProvider, ProviderError, SystemProvider};
-use cay_core::models::{BatteryStatus, MediaInfo, ToastNotification};
+use cay_core::models::{BatteryStatus, MediaInfo, PrivacyStatus, ToastNotification};
 use windows::Media::Control::{
     GlobalSystemMediaTransportControlsSession, GlobalSystemMediaTransportControlsSessionManager,
     GlobalSystemMediaTransportControlsSessionMediaProperties,
@@ -11,7 +11,9 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
 };
 use windows::Win32::Media::Audio::Endpoints::IAudioEndpointVolume;
-use windows::Win32::Media::Audio::{eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator};
+use windows::Win32::Media::Audio::{
+    eCapture, eConsole, eRender, IMMDeviceEnumerator, MMDeviceEnumerator,
+};
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CLSCTX_ALL, COINIT_MULTITHREADED,
 };
@@ -207,6 +209,18 @@ impl MediaProvider for WinSmtcMediaProvider {
         }
         Ok(())
     }
+
+    fn seek_to(&self, position_secs: f64) -> Result<(), ProviderError> {
+        if let Some(session) = self.current_session()? {
+            let ticks = (position_secs * 10_000_000.0) as i64;
+            let _ = session
+                .TryChangePlaybackPositionAsync(ticks)
+                .map_err(map_win_err)?
+                .join()
+                .map_err(map_win_err)?;
+        }
+        Ok(())
+    }
 }
 
 /// Windows `UserNotificationListener` provider.
@@ -347,6 +361,18 @@ impl SystemProvider for WinSystemProvider {
             is_charging,
             is_present,
         })
+    }
+
+    fn set_master_volume(&self, percent: u8) -> Result<(), ProviderError> {
+        set_system_master_volume_percent(percent)
+    }
+
+    fn get_privacy_status(&self) -> Result<PrivacyStatus, ProviderError> {
+        Ok(get_system_privacy_status())
+    }
+
+    fn set_microphone_mute(&self, muted: bool) -> Result<(), ProviderError> {
+        set_system_microphone_mute(muted)
     }
 }
 
@@ -604,6 +630,105 @@ pub fn get_system_master_volume_percent() -> Option<u8> {
         let scalar = endpoint_vol.GetMasterVolumeLevelScalar().ok()?;
         Some((scalar.clamp(0.0, 1.0) * 100.0).round() as u8)
     }
+}
+
+/// Sets the Windows master audio output volume percentage (0..=100) via Core Audio
+/// (`IMMDeviceEnumerator` + `IAudioEndpointVolume`).
+pub fn set_system_master_volume_percent(percent: u8) -> Result<(), ProviderError> {
+    init_mta();
+    // SAFETY: Standard COM activation on an MTA thread; pointers are managed by `windows` smart pointers.
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(map_win_err)?;
+        let device = enumerator
+            .GetDefaultAudioEndpoint(eRender, eConsole)
+            .map_err(map_win_err)?;
+        let endpoint_vol: IAudioEndpointVolume =
+            device.Activate(CLSCTX_ALL, None).map_err(map_win_err)?;
+        let scalar = (percent.min(100) as f32) / 100.0;
+        endpoint_vol
+            .SetMasterVolumeLevelScalar(scalar, std::ptr::null())
+            .map_err(map_win_err)?;
+        Ok(())
+    }
+}
+
+/// Queries the Windows default audio capture (microphone) mute state via Core Audio.
+pub fn get_system_microphone_mute() -> Option<bool> {
+    init_mta();
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).ok()?;
+        let device = enumerator
+            .GetDefaultAudioEndpoint(eCapture, eConsole)
+            .ok()?;
+        let endpoint_vol: IAudioEndpointVolume = device.Activate(CLSCTX_ALL, None).ok()?;
+        let is_muted = endpoint_vol.GetMute().ok()?;
+        Some(is_muted.as_bool())
+    }
+}
+
+/// Sets the Windows default audio capture (microphone) mute state via Core Audio.
+pub fn set_system_microphone_mute(muted: bool) -> Result<(), ProviderError> {
+    init_mta();
+    unsafe {
+        let enumerator: IMMDeviceEnumerator =
+            CoCreateInstance(&MMDeviceEnumerator, None, CLSCTX_ALL).map_err(map_win_err)?;
+        let device = enumerator
+            .GetDefaultAudioEndpoint(eCapture, eConsole)
+            .map_err(map_win_err)?;
+        let endpoint_vol: IAudioEndpointVolume =
+            device.Activate(CLSCTX_ALL, None).map_err(map_win_err)?;
+        endpoint_vol
+            .SetMute(muted, std::ptr::null())
+            .map_err(map_win_err)?;
+        Ok(())
+    }
+}
+
+/// Queries Windows hardware privacy status: active microphone usage, active webcam usage, and mute state.
+pub fn get_system_privacy_status() -> PrivacyStatus {
+    let is_mic_muted = get_system_microphone_mute().unwrap_or(false);
+
+    let is_mic_active = is_capability_active(
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone",
+    );
+    let is_camera_active = is_capability_active(
+        r"HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam",
+    );
+
+    PrivacyStatus {
+        is_mic_active,
+        is_camera_active,
+        is_mic_muted,
+    }
+}
+
+fn is_capability_active(key_path: &str) -> bool {
+    let mut cmd = std::process::Command::new("reg");
+    cmd.args(["query", key_path, "/s", "/v", "LastUsedTimeStop"]);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    let Ok(output) = cmd.output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    for line in stdout.lines() {
+        if line.contains("LastUsedTimeStop") {
+            let trimmed = line.trim();
+            if trimmed.ends_with("0x0") || trimmed.ends_with(" 0") {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Queries Windows Shell (`SHQueryUserNotificationState`) to determine whether Focus Assist,

@@ -1,6 +1,6 @@
 use crate::models::{
-    AccentPreset, BatteryStatus, CalendarMeeting, HudState, IslandSettings, MediaInfo,
-    MonitorChoice, TimerState, ToastNotification,
+    AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
+    MonitorChoice, PrivacyStatus, TimerState, ToastNotification,
 };
 use serde::{Deserialize, Serialize};
 
@@ -204,6 +204,8 @@ pub struct IslandStateMachine {
     is_simulator_open: bool,
     is_telemetry_widget_open: bool,
     simulated_preview_index: usize,
+    privacy_status: PrivacyStatus,
+    master_volume_percent: u8,
 }
 
 impl Default for IslandStateMachine {
@@ -233,6 +235,8 @@ impl Default for IslandStateMachine {
             is_simulator_open: false,
             is_telemetry_widget_open: false,
             simulated_preview_index: 0,
+            privacy_status: PrivacyStatus::default(),
+            master_volume_percent: 60,
         }
     }
 }
@@ -358,6 +362,55 @@ impl IslandStateMachine {
 
     pub fn set_simulated_preview_index(&mut self, idx: usize) {
         self.simulated_preview_index = idx % 6;
+    }
+
+    pub fn privacy(&self) -> PrivacyStatus {
+        self.privacy_status
+    }
+
+    pub fn set_privacy(&mut self, privacy: PrivacyStatus) {
+        self.privacy_status = privacy;
+    }
+
+    pub fn toggle_mic_muted(&mut self) -> bool {
+        self.privacy_status.is_mic_muted = !self.privacy_status.is_mic_muted;
+        self.privacy_status.is_mic_muted
+    }
+
+    pub fn master_volume(&self) -> u8 {
+        self.master_volume_percent
+    }
+
+    pub fn set_master_volume(&mut self, percent: u8) {
+        self.master_volume_percent = percent.min(100);
+        self.trigger_hud(HudState {
+            kind: HudKind::Volume,
+            level_percent: self.master_volume_percent,
+        });
+    }
+
+    pub fn seek_media(&mut self, target_secs: f64) {
+        if let Some(media) = &mut self.latest_media {
+            let max_secs = if media.duration_secs > 0.0 {
+                media.duration_secs
+            } else {
+                target_secs
+            };
+            media.position_secs = target_secs.clamp(0.0, max_secs);
+            if let IslandState::NowPlaying {
+                media: active_media,
+            } = &mut self.active_state
+            {
+                active_media.position_secs = media.position_secs;
+            }
+        }
+    }
+
+    pub fn step_media(&mut self, delta_secs: f64) {
+        if let Some(media) = &self.latest_media {
+            let next_pos = media.position_secs + delta_secs;
+            self.seek_media(next_pos);
+        }
     }
 
     pub fn active_settings_tab(&self) -> SettingsTab {
@@ -1102,5 +1155,74 @@ mod tests {
             ..Default::default()
         }));
         assert!(matches!(sm.current_state(), IslandState::NowPlaying { .. }));
+    }
+
+    #[test]
+    fn test_privacy_status_and_scrubbing_and_volume() {
+        let mut sm = IslandStateMachine::new();
+
+        // Privacy status
+        assert!(!sm.privacy().is_mic_active);
+        assert!(!sm.privacy().is_camera_active);
+        assert!(!sm.privacy().is_mic_muted);
+
+        sm.set_privacy(PrivacyStatus {
+            is_mic_active: true,
+            is_camera_active: true,
+            is_mic_muted: false,
+        });
+        assert!(sm.privacy().is_mic_active);
+        assert!(sm.privacy().is_camera_active);
+        assert!(!sm.privacy().is_mic_muted);
+
+        let muted = sm.toggle_mic_muted();
+        assert!(muted);
+        assert!(sm.privacy().is_mic_muted);
+
+        // Volume control
+        sm.set_master_volume(85);
+        assert_eq!(sm.master_volume(), 85);
+        assert!(matches!(
+            sm.current_state(),
+            IslandState::Hud {
+                hud: HudState {
+                    kind: HudKind::Volume,
+                    level_percent: 85,
+                }
+            }
+        ));
+
+        // Advance time to dismiss Volume HUD flyout
+        let _ = sm.tick(2.5);
+
+        // Media scrubbing
+        sm.set_media(Some(MediaInfo {
+            title: "Scrub Test".into(),
+            artist: "Tester".into(),
+            is_playing: true,
+            position_secs: 10.0,
+            duration_secs: 200.0,
+            ..Default::default()
+        }));
+        sm.seek_media(50.0);
+        if let IslandState::NowPlaying { media } = sm.current_state() {
+            assert_eq!(media.position_secs, 50.0);
+        } else {
+            panic!("Expected NowPlaying state");
+        }
+
+        sm.step_media(-15.0);
+        if let IslandState::NowPlaying { media } = sm.current_state() {
+            assert_eq!(media.position_secs, 35.0);
+        } else {
+            panic!("Expected NowPlaying state");
+        }
+
+        sm.step_media(100.0);
+        if let IslandState::NowPlaying { media } = sm.current_state() {
+            assert_eq!(media.position_secs, 135.0);
+        } else {
+            panic!("Expected NowPlaying state");
+        }
     }
 }

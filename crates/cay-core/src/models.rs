@@ -72,6 +72,14 @@ pub struct HudState {
     pub level_percent: u8,
 }
 
+/// Active recording / hardware privacy indicators.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PrivacyStatus {
+    pub is_mic_active: bool,
+    pub is_camera_active: bool,
+    pub is_mic_muted: bool,
+}
+
 /// Device power and battery status.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BatteryStatus {

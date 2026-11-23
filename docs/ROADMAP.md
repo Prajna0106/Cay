@@ -74,6 +74,14 @@ flowchart LR
 - [x] **Keyboard Accessibility & Global Hotkey**: Global `Win + Alt + I` shortcut (`RegisterHotKey`) to toggle the Expanded Hub from anywhere on Windows, plus `Esc` key handler to collapse the Hub.
 - [x] **Multi-Item Expanded Hub Cards**: Up to 3 upcoming events (with accent, warm, and neutral 3 px color bars and clickable "Open calendar" link) and up to 3 recent notifications (with app initial badges).
 - [x] **Frosted Glass Acrylic (Mica Translucency)**: Translucent mica background (`rgba` alpha 0.78), specular rim lighting (alpha 0.20), interior acrylic card surfaces (alpha 0.60), and toggleable settings option.
+- [x] **Active Mic / Camera Hardware Privacy Indicators & Global Mute**:
+  - Live background detection of active webcam and microphone recording sessions via Windows `CapabilityAccessManager\ConsentStore` and Core Audio capture endpoints.
+  - Real-time indicator dots in Minimal Idle and Now Playing states (lime green for camera active, warm amber for microphone recording, red mic-off indicator when muted).
+  - Expanded Hub header privacy cluster with instant one-click toggle to mute/unmute system microphone globally.
+  - Windows System Tray menu integration with `toggle_mic` action.
+- [x] **Interactive Track Scrubbing & Master Volume Stepping**:
+  - Interactive track progress scrubber in Expanded Hub with discrete seek stops (`25%`, `50%`, `75%`) and instant jump buttons (`[-15s]`, `[+15s]`), backed by WinRT SMTC `TryChangePlaybackPositionAsync`.
+  - Master volume stepping controls (`[-]` and `[+]` by 10%) on Expanded Hub media card and System Tray menu (`vol_up`, `vol_down`), backed by Windows Core Audio `IAudioEndpointVolume`.
 - [x] **Dedicated Settings & Preferences App (Stitch UI Screen 2)**: Full $840 \times 460\text{ px}$ preferences suite (`IslandState::Settings`) with 6-category sidebar (Appearance, Displays, Notifications, Calendar, Hotkeys, Diagnostics), live 1:1 notch preview, accent aura selectors, top margin stepper, DND & app blacklist switches, hotkey indicators, DirectX 12 telemetry, and Tray/Hub integration.
 
 ---

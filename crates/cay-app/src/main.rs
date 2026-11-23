@@ -1,14 +1,15 @@
 use cay_core::models::{
     AccentPreset, BatteryStatus, CalendarMeeting, HudKind, HudState, IslandSettings, MediaInfo,
-    MonitorChoice, TimerState, ToastNotification,
+    MonitorChoice, PrivacyStatus, TimerState, ToastNotification,
 };
 use cay_core::state::{IslandDimensions, IslandState, IslandStateMachine, SettingsTab};
 #[cfg(windows)]
 use cay_providers::{
     current_local_clock_and_date, get_system_master_volume_percent, init_mta,
     is_foreground_window_fullscreen, is_windows_quiet_hours_active, open_external_url,
-    process_working_set_bytes, set_windows_autostart, spawn_global_hotkey_listener,
-    WinNotificationProvider, WinSmtcMediaProvider, WinSystemProvider,
+    process_working_set_bytes, set_system_master_volume_percent, set_system_microphone_mute,
+    set_windows_autostart, spawn_global_hotkey_listener, WinNotificationProvider,
+    WinSmtcMediaProvider, WinSystemProvider,
 };
 use cay_providers::{
     CalendarProvider, IcsCalendarProvider, MediaProvider, NotificationProvider, SystemProvider,
@@ -326,6 +327,24 @@ static ICON_SAVE: Icon = Icon {
     body: r#"<path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><polyline points="17 21 17 13 7 13 7 21" fill="none" stroke="currentColor" stroke-width="1.8"/><polyline points="7 3 7 8 15 8" fill="none" stroke="currentColor" stroke-width="1.8"/>"#,
 };
 
+static ICON_MIC: Icon = Icon {
+    name: "cay-mic",
+    view: 24.0,
+    body: r#"<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M19 10v2a7 7 0 0 1-14 0v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 19v3m-4 0h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>"#,
+};
+
+static ICON_MIC_OFF: Icon = Icon {
+    name: "cay-mic-off",
+    view: 24.0,
+    body: r#"<line x1="2" y1="2" x2="22" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M5 10v2a7 7 0 0 0 12 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="8" y1="22" x2="16" y2="22" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>"#,
+};
+
+static ICON_CAMERA: Icon = Icon {
+    name: "cay-camera",
+    view: 24.0,
+    body: r#"<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="2"/>"#,
+};
+
 fn resolve_accent_color(preset: AccentPreset) -> Color {
     match preset {
         AccentPreset::Sky => ACCENT_SKY,
@@ -438,7 +457,7 @@ fn sample_event() -> CalendarMeeting {
     }
 }
 
-fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
+fn render_idle(clock: &str, battery: &BatteryStatus, privacy: &PrivacyStatus) -> El {
     let mut r = row()
         .key("content-idle")
         .w_full()
@@ -447,6 +466,25 @@ fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
         .center_y()
         .child(text(clock).font(FONT_CLOCK).color(TEXT_PRIMARY))
         .child(el().grow(1.0));
+
+    if privacy.is_camera_active || privacy.is_mic_active || privacy.is_mic_muted {
+        let mut priv_row = row().gap(5.0).center_y().px(4.0);
+        if privacy.is_camera_active {
+            priv_row = priv_row.child(el().size(7.0, 7.0).radius(3.5).fill(ACCENT_LIME));
+        }
+        if privacy.is_mic_active {
+            priv_row = priv_row.child(el().size(7.0, 7.0).radius(3.5).fill(ACCENT_WARM));
+        }
+        if privacy.is_mic_muted {
+            priv_row = priv_row.child(icon(&ICON_MIC_OFF, 13.0).color(Color {
+                r: 0.93,
+                g: 0.27,
+                b: 0.27,
+                a: 1.0,
+            }));
+        }
+        r = r.child(priv_row).child(el().w(4.0));
+    }
 
     if battery.is_present {
         r = r.child(
@@ -464,7 +502,12 @@ fn render_idle(clock: &str, battery: &BatteryStatus) -> El {
     r
 }
 
-fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -> El {
+fn render_now_playing(
+    media: &MediaInfo,
+    accent: Color,
+    waveform_phase: usize,
+    privacy: &PrivacyStatus,
+) -> El {
     let heights = [8.0_f32, 14.0, 10.0, 16.0, 6.0];
     let mut waveform = row().gap(3.0).center_y().h(16.0);
     for idx in 0..heights.len() {
@@ -487,7 +530,7 @@ fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -
     };
     let artist_text = truncate_preview(&artist_str, 16);
 
-    row()
+    let mut r = row()
         .key("content-now-playing")
         .w_full()
         .h_full()
@@ -512,8 +555,28 @@ fn render_now_playing(media: &MediaInfo, accent: Color, waveform_phase: usize) -
                         .color(TEXT_PRIMARY),
                 )
                 .child(text(artist_text).font(FONT_BODY).color(TEXT_MUTED)),
-        )
-        .child(waveform)
+        );
+
+    if privacy.is_camera_active || privacy.is_mic_active || privacy.is_mic_muted {
+        let mut priv_row = row().gap(4.0).center_y().px(2.0);
+        if privacy.is_camera_active {
+            priv_row = priv_row.child(el().size(6.0, 6.0).radius(3.0).fill(ACCENT_LIME));
+        }
+        if privacy.is_mic_active {
+            priv_row = priv_row.child(el().size(6.0, 6.0).radius(3.0).fill(ACCENT_WARM));
+        }
+        if privacy.is_mic_muted {
+            priv_row = priv_row.child(icon(&ICON_MIC_OFF, 12.0).color(Color {
+                r: 0.93,
+                g: 0.27,
+                b: 0.27,
+                a: 1.0,
+            }));
+        }
+        r = r.child(priv_row);
+    }
+
+    r.child(waveform)
 }
 
 fn render_notification(notif: &ToastNotification) -> El {
@@ -868,7 +931,95 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 .child(
                     row()
                         .w_full()
+                        .center_y()
                         .child(text(pos_label).font(FONT_META_TABULAR).color(TEXT_MUTED))
+                        .child(el().grow(1.0))
+                        .child(
+                            row()
+                                .gap(4.0)
+                                .center_y()
+                                .child(
+                                    el().key("seek-pct-25")
+                                        .role("button")
+                                        .label("Seek 25%")
+                                        .px(4.0)
+                                        .py(1.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .on_press(|s: &mut AppState| {
+                                            if let Some(dur) = s
+                                                .state_machine
+                                                .latest_media()
+                                                .map(|m| m.duration_secs)
+                                            {
+                                                if dur > 0.0 {
+                                                    let target = dur * 0.25;
+                                                    s.state_machine.seek_media(target);
+                                                    #[cfg(windows)]
+                                                    std::thread::spawn(move || {
+                                                        let _ = WinSmtcMediaProvider::new()
+                                                            .seek_to(target);
+                                                    });
+                                                }
+                                            }
+                                        })
+                                        .child(text("25%").font(FONT_CHIP).color(TEXT_MUTED)),
+                                )
+                                .child(
+                                    el().key("seek-pct-50")
+                                        .role("button")
+                                        .label("Seek 50%")
+                                        .px(4.0)
+                                        .py(1.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .on_press(|s: &mut AppState| {
+                                            if let Some(dur) = s
+                                                .state_machine
+                                                .latest_media()
+                                                .map(|m| m.duration_secs)
+                                            {
+                                                if dur > 0.0 {
+                                                    let target = dur * 0.50;
+                                                    s.state_machine.seek_media(target);
+                                                    #[cfg(windows)]
+                                                    std::thread::spawn(move || {
+                                                        let _ = WinSmtcMediaProvider::new()
+                                                            .seek_to(target);
+                                                    });
+                                                }
+                                            }
+                                        })
+                                        .child(text("50%").font(FONT_CHIP).color(TEXT_MUTED)),
+                                )
+                                .child(
+                                    el().key("seek-pct-75")
+                                        .role("button")
+                                        .label("Seek 75%")
+                                        .px(4.0)
+                                        .py(1.0)
+                                        .radius(4.0)
+                                        .fill(TRACK_BG)
+                                        .on_press(|s: &mut AppState| {
+                                            if let Some(dur) = s
+                                                .state_machine
+                                                .latest_media()
+                                                .map(|m| m.duration_secs)
+                                            {
+                                                if dur > 0.0 {
+                                                    let target = dur * 0.75;
+                                                    s.state_machine.seek_media(target);
+                                                    #[cfg(windows)]
+                                                    std::thread::spawn(move || {
+                                                        let _ = WinSmtcMediaProvider::new()
+                                                            .seek_to(target);
+                                                    });
+                                                }
+                                            }
+                                        })
+                                        .child(text("75%").font(FONT_CHIP).color(TEXT_MUTED)),
+                                ),
+                        )
                         .child(el().grow(1.0))
                         .child(text(dur_label).font(FONT_META_TABULAR).color(TEXT_MUTED)),
                 ),
@@ -877,7 +1028,29 @@ fn render_hub(state: &AppState, accent: Color) -> El {
             row()
                 .w_full()
                 .center()
-                .gap(16.0)
+                .gap(10.0)
+                .child(
+                    el().key("hub-btn-seek-back")
+                        .role("button")
+                        .label("Rewind 15 seconds")
+                        .px(6.0)
+                        .py(3.0)
+                        .radius(6.0)
+                        .fill(TRACK_BG)
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.step_media(-15.0);
+                            let pos = s
+                                .state_machine
+                                .latest_media()
+                                .map(|m| m.position_secs)
+                                .unwrap_or(0.0);
+                            #[cfg(windows)]
+                            std::thread::spawn(move || {
+                                let _ = WinSmtcMediaProvider::new().seek_to(pos);
+                            });
+                        })
+                        .child(text("-15s").font(FONT_CHIP).color(TEXT_MUTED)),
+                )
                 .child(
                     el().key("hub-btn-prev")
                         .role("button")
@@ -934,6 +1107,28 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                             });
                         })
                         .child(icon(&ICON_NEXT, 16.0).color(TEXT_SECONDARY)),
+                )
+                .child(
+                    el().key("hub-btn-seek-fwd")
+                        .role("button")
+                        .label("Forward 15 seconds")
+                        .px(6.0)
+                        .py(3.0)
+                        .radius(6.0)
+                        .fill(TRACK_BG)
+                        .on_press(|s: &mut AppState| {
+                            s.state_machine.step_media(15.0);
+                            let pos = s
+                                .state_machine
+                                .latest_media()
+                                .map(|m| m.position_secs)
+                                .unwrap_or(0.0);
+                            #[cfg(windows)]
+                            std::thread::spawn(move || {
+                                let _ = WinSmtcMediaProvider::new().seek_to(pos);
+                            });
+                        })
+                        .child(text("+15s").font(FONT_CHIP).color(TEXT_MUTED)),
                 ),
         )
         .child(el().grow(1.0))
@@ -948,7 +1143,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                         .center_y()
                         .child(icon(&ICON_HEADPHONES, 11.0).color(accent))
                         .child(
-                            text("Default Endpoint")
+                            text("Master Endpoint")
                                 .font(FONT_META)
                                 .color(TEXT_SECONDARY),
                         ),
@@ -958,8 +1153,48 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                     row()
                         .gap(4.0)
                         .center_y()
+                        .child(
+                            el().key("vol-btn-down")
+                                .role("button")
+                                .label("Volume down 10%")
+                                .px(5.0)
+                                .py(1.0)
+                                .radius(4.0)
+                                .fill(TRACK_BG)
+                                .on_press(|s: &mut AppState| {
+                                    let next = s.state_machine.master_volume().saturating_sub(10);
+                                    s.state_machine.set_master_volume(next);
+                                    #[cfg(windows)]
+                                    std::thread::spawn(move || {
+                                        let _ = set_system_master_volume_percent(next);
+                                    });
+                                })
+                                .child(text("−").font(FONT_CHIP).color(TEXT_MUTED)),
+                        )
                         .child(icon(&ICON_VOLUME, 11.0).color(TEXT_MUTED))
-                        .child(text("74%").font(FONT_META_TABULAR).color(TEXT_MUTED)),
+                        .child(
+                            text(format!("{}%", state.state_machine.master_volume()))
+                                .font(FONT_META_TABULAR)
+                                .color(TEXT_MUTED),
+                        )
+                        .child(
+                            el().key("vol-btn-up")
+                                .role("button")
+                                .label("Volume up 10%")
+                                .px(5.0)
+                                .py(1.0)
+                                .radius(4.0)
+                                .fill(TRACK_BG)
+                                .on_press(|s: &mut AppState| {
+                                    let next = (s.state_machine.master_volume() + 10).min(100);
+                                    s.state_machine.set_master_volume(next);
+                                    #[cfg(windows)]
+                                    std::thread::spawn(move || {
+                                        let _ = set_system_master_volume_percent(next);
+                                    });
+                                })
+                                .child(text("+").font(FONT_CHIP).color(TEXT_MUTED)),
+                        ),
                 ),
         );
 
@@ -1368,6 +1603,98 @@ fn render_hub(state: &AppState, accent: Color) -> El {
             ),
     );
 
+    let privacy = state.state_machine.privacy();
+    let mic_btn_bg = if privacy.is_mic_muted {
+        Color {
+            r: 0.93,
+            g: 0.27,
+            b: 0.27,
+            a: 0.20,
+        }
+    } else if privacy.is_mic_active {
+        ACCENT_WARM.alpha(0.20)
+    } else {
+        TRACK_BG
+    };
+    let mic_btn_border = if privacy.is_mic_muted {
+        Color {
+            r: 0.93,
+            g: 0.27,
+            b: 0.27,
+            a: 0.60,
+        }
+    } else if privacy.is_mic_active {
+        ACCENT_WARM
+    } else {
+        GLASS_CARD_BORDER
+    };
+    let mic_icon = if privacy.is_mic_muted {
+        &ICON_MIC_OFF
+    } else {
+        &ICON_MIC
+    };
+    let mic_color = if privacy.is_mic_muted {
+        Color {
+            r: 0.93,
+            g: 0.27,
+            b: 0.27,
+            a: 1.0,
+        }
+    } else if privacy.is_mic_active {
+        ACCENT_WARM
+    } else {
+        TEXT_MUTED
+    };
+    let mic_label = if privacy.is_mic_muted {
+        "Mic: Muted"
+    } else if privacy.is_mic_active {
+        "Mic: Active"
+    } else {
+        "Mic: Ready"
+    };
+
+    let mut privacy_cluster = row().gap(6.0).center_y().child(
+        el().key("hub-btn-toggle-mic")
+            .role("button")
+            .label("Toggle Microphone Mute")
+            .px(6.0)
+            .py(1.0)
+            .radius(5.0)
+            .fill(mic_btn_bg)
+            .border(1.0, mic_btn_border)
+            .on_press(|s: &mut AppState| {
+                let next = s.state_machine.toggle_mic_muted();
+                #[cfg(windows)]
+                std::thread::spawn(move || {
+                    let _ = set_system_microphone_mute(next);
+                });
+            })
+            .child(
+                row()
+                    .gap(4.0)
+                    .center_y()
+                    .child(icon(mic_icon, 10.0).color(mic_color))
+                    .child(text(mic_label).font(FONT_CHIP).color(mic_color)),
+            ),
+    );
+
+    if privacy.is_camera_active {
+        privacy_cluster = privacy_cluster.child(
+            el().px(6.0)
+                .py(1.0)
+                .radius(5.0)
+                .fill(ACCENT_LIME.alpha(0.20))
+                .border(1.0, ACCENT_LIME)
+                .child(
+                    row()
+                        .gap(4.0)
+                        .center_y()
+                        .child(icon(&ICON_CAMERA, 10.0).color(ACCENT_LIME))
+                        .child(text("Cam: Active").font(FONT_CHIP).color(ACCENT_LIME)),
+                ),
+        );
+    }
+
     let top_bar = row()
         .w_full()
         .min_w(0.0)
@@ -1389,6 +1716,7 @@ fn render_hub(state: &AppState, accent: Color) -> El {
                 ),
         )
         .child(el().grow(1.0))
+        .child(privacy_cluster)
         .child(
             row()
                 .gap(8.0)
@@ -3358,11 +3686,12 @@ fn island_view(state: &AppState, _: &mut Cx<AppState>) -> El {
         radius,
     } = current.dimensions();
     let accent = resolve_accent_color(state.state_machine.settings().accent);
+    let privacy = state.state_machine.privacy();
 
     let inner = match &current {
-        IslandState::Idle { battery } => render_idle(&state.clock_text, battery),
+        IslandState::Idle { battery } => render_idle(&state.clock_text, battery, &privacy),
         IslandState::NowPlaying { media } => {
-            render_now_playing(media, accent, state.waveform_phase)
+            render_now_playing(media, accent, state.waveform_phase, &privacy)
         }
         IslandState::Notification { notification } => render_notification(notification),
         IslandState::UpcomingEvent { event } => render_upcoming_event(event, accent),
@@ -3436,6 +3765,10 @@ fn build_tray_menu() -> Vec<TrayItem> {
         TrayItem::action("open_simulator", "Desktop Island Simulator..."),
         TrayItem::action("toggle_widget", "Toggle Floating Telemetry Widget"),
         TrayItem::action("toggle_hub", "Toggle Expanded Hub"),
+        TrayItem::Separator,
+        TrayItem::action("toggle_mic", "Privacy: Toggle Microphone Mute"),
+        TrayItem::action("vol_up", "Master Volume: +10%"),
+        TrayItem::action("vol_down", "Master Volume: -10%"),
         TrayItem::Separator,
         TrayItem::action("timer_start_25", "Focus Timer: Start 25 min"),
         TrayItem::action("timer_pause_resume", "Focus Timer: Pause / Resume"),
@@ -3536,6 +3869,18 @@ fn spec() -> AppSpec<AppState> {
             ("widget", |s| {
                 s.state_machine.open_telemetry_widget();
             }),
+            ("privacy", |s| {
+                s.state_machine.set_privacy(PrivacyStatus {
+                    is_mic_active: true,
+                    is_camera_active: true,
+                    is_mic_muted: false,
+                });
+            }),
+            ("hub_scrub", |s| {
+                s.state_machine.set_media(Some(sample_media()));
+                s.state_machine.seek_media(114.0);
+                s.state_machine.toggle_hub();
+            }),
         ],
         ..AppSpec::new("Cay", (880.0, 500.0), AppState::default, island_view)
     }
@@ -3606,6 +3951,29 @@ fn main() {
                         tray_pill.update(|s, _| s.state_machine.toggle_telemetry_widget())
                     }
                     "toggle_hub" => tray_pill.update(|s, _| s.state_machine.toggle_hub()),
+                    "toggle_mic" => tray_pill.update(|s, _| {
+                        let next = s.state_machine.toggle_mic_muted();
+                        #[cfg(windows)]
+                        std::thread::spawn(move || {
+                            let _ = set_system_microphone_mute(next);
+                        });
+                    }),
+                    "vol_up" => tray_pill.update(|s, _| {
+                        let next = (s.state_machine.master_volume() + 10).min(100);
+                        s.state_machine.set_master_volume(next);
+                        #[cfg(windows)]
+                        std::thread::spawn(move || {
+                            let _ = set_system_master_volume_percent(next);
+                        });
+                    }),
+                    "vol_down" => tray_pill.update(|s, _| {
+                        let next = s.state_machine.master_volume().saturating_sub(10);
+                        s.state_machine.set_master_volume(next);
+                        #[cfg(windows)]
+                        std::thread::spawn(move || {
+                            let _ = set_system_master_volume_percent(next);
+                        });
+                    }),
                     "timer_start_25" => tray_pill.update(|s, _| {
                         s.state_machine.start_focus_timer(25 * 60, "Focus");
                     }),
@@ -3832,6 +4200,7 @@ fn main() {
                         let (clock_now, today_now) = current_local_clock_and_date();
                         let quiet_hours_now = is_windows_quiet_hours_active();
                         let battery_opt = sys.get_battery_status().ok();
+                        let privacy_opt = sys.get_privacy_status().ok();
                         let media_opt = smtc.get_current_media().ok().flatten();
                         if let Some(bytes) = media_opt
                             .as_ref()
@@ -3846,17 +4215,18 @@ fn main() {
                             let before_state = s.state_machine.current_state();
                             let before_clock = s.clock_text.clone();
                             let before_phase = s.waveform_phase;
+                            let before_privacy = s.state_machine.privacy();
 
                             s.clock_text = clock_now;
                             s.today_header = today_now;
                             s.state_machine.set_fullscreen_concealed(is_fullscreen);
                             s.state_machine.set_os_quiet_hours(quiet_hours_now);
 
+                            if let Some(priv_stat) = privacy_opt {
+                                s.state_machine.set_privacy(priv_stat);
+                            }
                             if let Some(vol) = changed_vol {
-                                s.state_machine.trigger_hud(HudState {
-                                    kind: HudKind::Volume,
-                                    level_percent: vol,
-                                });
+                                s.state_machine.set_master_volume(vol);
                             }
                             if let Some(bat) = battery_opt {
                                 s.state_machine.set_battery(bat);
@@ -3877,6 +4247,7 @@ fn main() {
                             s.state_machine.current_state() != before_state
                                 || s.clock_text != before_clock
                                 || s.waveform_phase != before_phase
+                                || s.state_machine.privacy() != before_privacy
                         });
 
                         std::thread::sleep(std::time::Duration::from_millis(1000));
